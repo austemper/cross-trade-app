@@ -577,7 +577,7 @@
                 <div class="flex items-center gap-1.5 flex-wrap">
                   <span class="text-amber-700 font-medium">最大手数料:</span>
                   <span class="font-bold text-red-600" x-text="'¥' + maxFlyingFee(s).toLocaleString()"></span>
-                  <span class="text-gray-400">(100株・18日・年率3.9%)</span>
+                  <span class="text-gray-400">(100株・短期15日+1日・年率3.9%)</span>
                   <span class="font-medium px-1.5 py-0.5 rounded"
                     :class="Number(s.benefitScore) >= 8 ? 'bg-green-100 text-green-700' : Number(s.benefitScore) >= 6 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'"
                     x-text="'優待スコア' + s.benefitScore + '/10'"></span>
@@ -813,9 +813,9 @@
             <!-- フライング最大手数料 vs 優待比較 -->
             <div x-show="s.generalCredit === '○'" class="mt-1.5 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 text-xs">
               <div class="flex items-center gap-2 flex-wrap">
-                <span class="text-amber-700 font-medium">最大手数料(フライング18日):</span>
+                <span class="text-amber-700 font-medium">最大手数料(フライング):</span>
                 <span class="font-bold text-red-600" x-text="'¥' + maxFlyingFee(s).toLocaleString()"></span>
-                <span class="text-gray-400">/ 100株・年率3.9%</span>
+                <span class="text-gray-400" x-text="'/ 100株・' + (s.flyingStart && s.kenriTsuki ? Math.round((s.kenriTsuki - s.flyingStart)/86400000)+1 : 16) + '日・年率3.9%'"></span>
               </div>
               <div class="mt-0.5 flex items-center gap-1.5">
                 <span class="text-gray-500">優待お得度スコア</span>
@@ -1489,8 +1489,13 @@ function crossTradeApp() {
       if (days <= 14) return 'bg-yellow-100 text-yellow-700';
       return 'bg-green-100 text-green-700';
     },
-    maxFlyingFee(s, days = 18) {
+    maxFlyingFee(s) {
       const p = parseInt(String(s.price || '0').replace(/,/g, '')) || 0;
+      let days = 16; // デフォルト: 短期15日物 + 現渡し約定1日
+      if (s.flyingStart && s.kenriTsuki) {
+        // 実際の日付差: フライング開始〜権利付最終日 + 1(現渡し約定日)
+        days = Math.round((s.kenriTsuki - s.flyingStart) / 86400000) + 1;
+      }
       return Math.floor(p * 100 * 0.039 / 365 * days);
     },
     get executionLog() {
