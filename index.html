@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>クロス取引スケジュール管理</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-800" x-data="crossTradeApp()" x-init="init()" x-cloak>
+
+<!-- ヘッダー -->
+<header class="bg-blue-700 text-white shadow-md">
+  <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div>
+      <h1 class="text-lg font-bold tracking-wide">クロス取引スケジュール管理</h1>
+      <p class="text-blue-200 text-xs mt-0.5">株主優待クロス取引・一般信用売り管理ツール</p>
+    </div>
+    <div class="text-right text-xs text-blue-200">
+      <div x-text="today"></div>
+      <div x-text="stocks.length + '銘柄登録中'"></div>
+    </div>
+  </div>
+</header>
+
+<!-- タブナビゲーション -->
+<nav class="bg-white border-b border-gray-200 sticky top-0 z-20 shadow-sm">
+  <div class="max-w-5xl mx-auto px-2">
+    <div class="flex overflow-x-auto scrollbar-hide">
+      <template x-for="tab in tabs" :key="tab.id">
+        <button
+          @click="activeTab = tab.id"
+          :class="activeTab === tab.id
+            ? 'border-blue-600 text-blue-700 font-semibold'
+            : 'border-transparent text-gray-500 hover:text-gray-700'"
+          class="px-4 py-3 text-sm border-b-2 whitespace-nowrap transition-colors"
+          x-text="tab.label"
+        ></button>
+      </template>
+    </div>
+  </div>
+</nav>
+
+<!-- メインコンテンツ -->
+<main class="max-w-5xl mx-auto px-3 py-4 pb-16">
+
+  <!-- ===== ダッシュボード ===== -->
+  <div x-show="activeTab === 'dashboard'">
+    <!-- サマリーカード -->
+    <div class="grid grid-cols-3 gap-2 mb-4">
+      <div class="bg-white rounded-xl shadow-sm p-3 text-center border border-gray-100">
+        <div class="text-2xl font-bold text-blue-700" x-text="dashboardStocks.length"></div>
+        <div class="text-xs text-gray-500 mt-1">60日以内の権利日</div>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm p-3 text-center border border-gray-100">
+        <div class="text-2xl font-bold text-yellow-600" x-text="dashboardStocks.filter(s => s.status === 'ordered').length"></div>
+        <div class="text-xs text-gray-500 mt-1">注文済み</div>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm p-3 text-center border border-gray-100">
+        <div class="text-2xl font-bold text-green-600" x-text="dashboardStocks.filter(s => s.status === 'done').length"></div>
+        <div class="text-xs text-gray-500 mt-1">完了</div>
+      </div>
+    </div>
+
+    <!-- 重要注意バナー -->
+    <div class="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 mb-4 text-xs text-amber-800">
+      <span class="font-semibold">現渡し注意：</span>権利付最終日の<span class="font-semibold">18:00〜19:00以降</span>に現渡し予約注文を行うこと。15:30以降の取引時間延長中は危険。翌営業日（権利落ち日）に決済されます。
+    </div>
+
+    <!-- 銘柄カード一覧 -->
+    <div class="space-y-3" x-show="dashboardStocks.length > 0">
+      <template x-for="stock in dashboardStocks" :key="stock.id">
+        <div
+          class="bg-white rounded-xl shadow-sm border border-gray-100 p-4"
+          :class="{
+            'border-l-4 border-l-orange-400': stock.continuousRequired,
+            'border-l-4 border-l-red-500': stock.creditType === 'institution' && stock.gyakuhibuRisk === 'high' && !stock.continuousRequired
+          }"
+        >
+          <!-- 上部行 -->
+          <div class="flex items-start justify-between mb-2">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-bold text-gray-900" x-text="stock.name"></span>
+                <span class="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded font-mono" x-text="stock.code"></span>
+                <span class="text-xs px-2 py-0.5 rounded-full font-medium" :class="statusClass(stock.status)" x-text="statusLabel(stock.status)"></span>
+                <template x-if="stock.creditType === 'institution' && stock.gyakuhibuRisk === 'high'">
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold">&#9888; 逆日歩リスク高</span>
+                </template>
+                <template x-if="stock.creditType === 'institution' && stock.gyakuhibuRisk === 'medium'">
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">逆日歩リスク中</span>
+                </template>
+                <template x-if="stock.continuousRequired">
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 font-semibold">継続保有必要</span>
+                </template>
+              </div>
+              <div class="text-xs text-gray-500 mt-1" x-text="stock.benefit"></div>
+            </div>
+            <div class="text-right ml-2 flex-shrink-0">
+              <div class="font-bold text-green-700 text-sm" x-text="'¥' + Number(stock.benefitValue || 0).toLocaleString()"></div>
+              <div class="text-xs text-gray-400 mt-0.5" x-text="brokerLabel(stock.broker)"></div>
+              <div class="text-xs text-gray-400" x-text="stock.creditType === 'general' ? '一般信用' : '制度信用'"></div>
+            </div>
+          </div>
+
+          <!-- 継続保有警告 -->
+          <template x-if="stock.continuousRequired">
+            <div class="mb-2 text-xs bg-orange-50 border border-orange-200 text-orange-700 rounded-lg px-3 py-2 font-medium">
+              継続保有条件ありのためクロス取引での優待取得は不可です。
+            </div>
+          </template>
+
+          <!-- 日付グリッド -->
+          <div class="grid grid-cols-2 gap-2 mt-2 text-xs">
+            <div class="bg-gray-50 rounded-lg p-2.5">
+              <div class="text-gray-500">権利付最終日</div>
+              <div class="font-semibold text-gray-800 mt-0.5" x-text="formatDate(stock.rightsDate)"></div>
+              <div class="font-medium mt-0.5" :class="daysDiff(stock.rightsDate) <= 7 ? 'text-red-600' : 'text-blue-600'" x-text="'あと ' + daysDiff(stock.rightsDate) + ' 日'"></div>
+            </div>
+            <div class="bg-blue-50 rounded-lg p-2.5">
+              <div class="text-gray-500">通常クロス開始目安</div>
+              <div class="font-semibold text-blue-800 mt-0.5" x-text="formatDate(crossStartDate(stock.rightsDate))"></div>
+              <div class="text-blue-500 mt-0.5">前場寄成・19:00以降予約</div>
+            </div>
+            <div class="bg-purple-50 rounded-lg p-2.5">
+              <div class="text-gray-500">フライングクロス目安</div>
+              <div class="font-semibold text-purple-800 mt-0.5" x-text="formatDate(flyingCrossStartDate(stock.rightsDate))"></div>
+              <div class="text-purple-500 mt-0.5">1日早く開始</div>
+            </div>
+            <div class="bg-orange-50 rounded-lg p-2.5">
+              <div class="text-gray-500">現渡し予定日（権利落ち日）</div>
+              <div class="font-semibold text-orange-800 mt-0.5" x-text="formatDate(exRightsDate(stock.rightsDate))"></div>
+              <div class="text-orange-600 mt-0.5 font-medium">前日18:00〜19:00以降に予約</div>
+            </div>
+          </div>
+
+          <!-- 期限警告 -->
+          <template x-if="daysDiff(crossStartDate(stock.rightsDate)) >= 0 && daysDiff(crossStartDate(stock.rightsDate)) <= 2 && stock.status === 'pending'">
+            <div class="mt-2 text-xs bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2 font-medium">
+              &#9888; 通常クロス開始日まであと <span x-text="daysDiff(crossStartDate(stock.rightsDate))"></span> 日です！19:00以降に在庫確認・予約注文を行ってください。
+            </div>
+          </template>
+          <template x-if="daysDiff(crossStartDate(stock.rightsDate)) < 0 && stock.status === 'pending'">
+            <div class="mt-2 text-xs bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2 font-medium">
+              &#9888; 通常クロス開始日を過ぎています。在庫状況を確認してください。
+            </div>
+          </template>
+
+          <!-- メモ -->
+          <template x-if="stock.memo">
+            <div class="mt-2 text-xs text-gray-400 italic border-t border-gray-100 pt-2" x-text="'メモ: ' + stock.memo"></div>
+          </template>
+
+          <!-- ステータスボタン -->
+          <div class="flex gap-1.5 mt-3 flex-wrap items-center">
+            <span class="text-xs text-gray-400 mr-1">ステータス:</span>
+            <button @click="updateStatus(stock, 'pending')" :class="stock.status === 'pending' ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'" class="text-xs px-2.5 py-1.5 rounded-lg transition-colors">未着手</button>
+            <button @click="updateStatus(stock, 'ordered')" :class="stock.status === 'ordered' ? 'bg-yellow-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'" class="text-xs px-2.5 py-1.5 rounded-lg transition-colors">注文済み</button>
+            <button @click="updateStatus(stock, 'delivered')" :class="stock.status === 'delivered' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'" class="text-xs px-2.5 py-1.5 rounded-lg transition-colors">現渡し済み</button>
+            <button @click="updateStatus(stock, 'done')" :class="stock.status === 'done' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'" class="text-xs px-2.5 py-1.5 rounded-lg transition-colors">完了</button>
+            <button @click="openEditStock(stock)" class="text-xs px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 ml-auto transition-colors">編集</button>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- 空状態 -->
+    <div x-show="dashboardStocks.length === 0" class="text-center py-16 text-gray-400">
+      <div class="w-16 h-16 mx-auto mb-3 bg-gray-200 rounded-full flex items-center justify-center text-2xl">&#128202;</div>
+      <p class="font-medium text-gray-600">60日以内の権利日を持つ銘柄はありません</p>
+      <p class="text-sm mt-1">「銘柄管理」タブから銘柄を追加してください</p>
+      <button @click="activeTab = 'stocks'; openAddStock()" class="mt-4 bg-blue-600 text-white text-sm px-5 py-2.5 rounded-lg hover:bg-blue-700 font-medium shadow-sm">銘柄を追加する</button>
+    </div>
+  </div>
+
+
+  <!-- ===== 銘柄管理 ===== -->
+  <div x-show="activeTab === 'stocks'">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-base font-bold text-gray-800">
+        銘柄管理
+        <span class="text-sm font-normal text-gray-500" x-text="'（' + stocks.length + '件）'"></span>
+      </h2>
+      <button @click="openAddStock()" class="bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700 font-medium shadow-sm">+ 銘柄追加</button>
+    </div>
+
+    <!-- 銘柄リスト -->
+    <div class="space-y-2" x-show="stocks.length > 0">
+      <template x-for="stock in stocks.slice().sort((a,b) => new Date(a.rightsDate) - new Date(b.rightsDate))" :key="stock.id">
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-bold text-gray-900" x-text="stock.name"></span>
+                <span class="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded font-mono" x-text="stock.code"></span>
+                <span class="text-xs px-2 py-0.5 rounded-full font-medium" :class="statusClass(stock.status)" x-text="statusLabel(stock.status)"></span>
+                <template x-if="stock.creditType === 'institution' && stock.gyakuhibuRisk === 'high'">
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold">&#9888; 逆日歩高リスク</span>
+                </template>
+                <template x-if="stock.continuousRequired">
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 font-medium">継続保有必要</span>
+                </template>
+              </div>
+              <div class="mt-1.5 text-xs space-y-0.5 text-gray-600">
+                <div>権利付最終日: <span class="font-medium text-gray-800" x-text="formatDate(stock.rightsDate)"></span></div>
+                <div x-text="stock.benefit || '（優待内容未設定）'"></div>
+                <div class="flex flex-wrap gap-2 mt-1">
+                  <span class="bg-green-50 text-green-700 px-1.5 py-0.5 rounded font-medium" x-text="'¥' + Number(stock.benefitValue || 0).toLocaleString()"></span>
+                  <span class="bg-gray-50 text-gray-600 px-1.5 py-0.5 rounded" x-text="brokerLabel(stock.broker)"></span>
+                  <span class="bg-gray-50 text-gray-600 px-1.5 py-0.5 rounded" x-text="stock.creditType === 'general' ? '一般信用' : '制度信用'"></span>
+                  <template x-if="stock.creditType === 'institution'">
+                    <span class="px-1.5 py-0.5 rounded" :class="stock.gyakuhibuRisk === 'high' ? 'bg-red-50 text-red-600' : stock.gyakuhibuRisk === 'medium' ? 'bg-orange-50 text-orange-600' : 'bg-gray-50 text-gray-500'" x-text="'逆日歩' + riskLabel(stock.gyakuhibuRisk)"></span>
+                  </template>
+                </div>
+                <template x-if="stock.memo">
+                  <div class="text-gray-400 italic pt-0.5" x-text="'メモ: ' + stock.memo"></div>
+                </template>
+              </div>
+            </div>
+            <div class="flex flex-col gap-1.5 flex-shrink-0">
+              <button @click="openEditStock(stock)" class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg transition-colors">編集</button>
+              <button @click="deleteStock(stock.id)" class="text-xs bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg transition-colors">削除</button>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- 空状態 -->
+    <div x-show="stocks.length === 0" class="text-center py-16 text-gray-400">
+      <p class="font-medium text-gray-600">銘柄が登録されていません</p>
+      <p class="text-sm mt-1">右上の「銘柄追加」ボタンから登録してください</p>
+    </div>
+  </div>
+
+
+  <!-- ===== 計算ツール ===== -->
+  <div x-show="activeTab === 'calc'" class="space-y-5">
+
+    <!-- スケジュール計算 -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+      <h2 class="font-bold text-gray-800 text-base mb-0.5">スケジュール計算</h2>
+      <p class="text-xs text-gray-500 mb-4">権利付最終日を入力すると各取引日程の目安を計算します<br><span class="text-amber-600 font-medium">※祝日を考慮しない概算です。実際の営業日カレンダーで必ず確認してください。</span></p>
+
+      <div class="flex gap-2 items-end">
+        <div class="flex-1">
+          <label class="text-xs text-gray-600 block mb-1 font-medium">権利付最終日</label>
+          <input type="date" x-model="schedCalcDate" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+        </div>
+        <button @click="calcSchedule()" class="bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap">計算</button>
+      </div>
+
+      <div x-show="schedResult" class="mt-4">
+        <div class="space-y-0 rounded-xl overflow-hidden border border-gray-100">
+          <div class="flex justify-between items-center px-4 py-3 bg-purple-50 border-b border-purple-100">
+            <div>
+              <div class="text-sm font-medium text-purple-800">フライングクロス開始目安</div>
+              <div class="text-xs text-purple-600 mt-0.5">16営業日前〜 / 19:00以降に予約注文</div>
+            </div>
+            <div class="font-bold text-purple-700" x-text="schedResult ? schedResult.flyingStart : ''"></div>
+          </div>
+          <div class="flex justify-between items-center px-4 py-3 bg-blue-50 border-b border-blue-100">
+            <div>
+              <div class="text-sm font-medium text-blue-800">通常クロス開始目安</div>
+              <div class="text-xs text-blue-600 mt-0.5">15営業日前〜 / 19:00以降に予約注文</div>
+            </div>
+            <div class="font-bold text-blue-700" x-text="schedResult ? schedResult.crossStart : ''"></div>
+          </div>
+          <div class="flex justify-between items-center px-4 py-3 bg-white border-b border-gray-100">
+            <div>
+              <div class="text-sm font-medium text-gray-800">権利付最終日</div>
+              <div class="text-xs text-gray-500 mt-0.5">当日18:00〜19:00以降に現渡し予約注文</div>
+            </div>
+            <div class="font-bold text-gray-700" x-text="schedResult ? schedResult.rightsDate : ''"></div>
+          </div>
+          <div class="flex justify-between items-center px-4 py-3 bg-orange-50">
+            <div>
+              <div class="text-sm font-medium text-orange-800">権利落ち日（現渡し実行日）</div>
+              <div class="text-xs text-orange-600 mt-0.5">翌営業日 / 現渡し決済が完了する日</div>
+            </div>
+            <div class="font-bold text-orange-700" x-text="schedResult ? schedResult.exRights : ''"></div>
+          </div>
+        </div>
+        <div class="bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-800 mt-3">
+          <span class="font-semibold">重要：</span>現渡し予約注文は権利付最終日の取引終了後（18:00〜19:00以降）に行ってください。15:30以降の東証取引時間延長中に現渡し注文をするのは危険です。翌日（権利落ち日）に現渡しが決済されます。
+        </div>
+      </div>
+    </div>
+
+    <!-- 貸株料計算機 -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+      <h2 class="font-bold text-gray-800 text-base mb-0.5">貸株料計算機</h2>
+      <p class="text-xs text-gray-500 mb-4">クロス取引のコスト（貸株料）を計算します<br>計算式: 約定代金 × 年利率 ÷ 365 × 保有日数</p>
+
+      <div class="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label class="text-xs text-gray-600 block mb-1 font-medium">株価（円）</label>
+          <input type="number" x-model="lendCalc.price" placeholder="1000" min="0" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+        </div>
+        <div>
+          <label class="text-xs text-gray-600 block mb-1 font-medium">株数</label>
+          <input type="number" x-model="lendCalc.shares" placeholder="100" min="0" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+        </div>
+        <div>
+          <label class="text-xs text-gray-600 block mb-1 font-medium">証券会社</label>
+          <select x-model="lendCalc.broker" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+            <option value="SBI">SBI証券（3.9%）</option>
+            <option value="MUFG">三菱UFJ eスマート（1.1%）</option>
+            <option value="SMBC">SMBC日興証券（1.9%）</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-gray-600 block mb-1 font-medium">保有日数</label>
+          <input type="number" x-model="lendCalc.days" placeholder="15" min="1" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+        </div>
+      </div>
+
+      <button @click="calcLending()" class="w-full bg-blue-600 text-white text-sm py-2.5 rounded-lg hover:bg-blue-700 font-medium mb-4">計算する</button>
+
+      <div x-show="lendResult">
+        <div class="bg-gray-50 rounded-xl p-3 mb-2 text-xs text-gray-600">
+          約定代金: <span class="font-bold text-gray-800 text-sm" x-text="lendResult ? '¥' + lendResult.amount : ''"></span>
+          <span class="ml-2" x-text="lendResult ? '（年利 ' + lendResult.rate + '%）' : ''"></span>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="bg-blue-50 rounded-xl p-3">
+            <div class="text-xs text-blue-700 font-semibold mb-1">通常クロス</div>
+            <div class="text-xs text-gray-500 mb-2" x-text="lendResult ? lendResult.normalDays + '日間' : ''"></div>
+            <div class="font-bold text-gray-800 text-lg" x-text="lendResult ? '¥' + lendResult.normalFee : ''"></div>
+            <div class="text-xs text-gray-500 mt-1" x-text="lendResult ? 'コスト率: ' + lendResult.normalRate + '%' : ''"></div>
+          </div>
+          <div class="bg-purple-50 rounded-xl p-3">
+            <div class="text-xs text-purple-700 font-semibold mb-1">フライングクロス</div>
+            <div class="text-xs text-gray-500 mb-2" x-text="lendResult ? lendResult.flyingDays + '日間' : ''"></div>
+            <div class="font-bold text-gray-800 text-lg" x-text="lendResult ? '¥' + lendResult.flyingFee : ''"></div>
+            <div class="text-xs text-gray-500 mt-1" x-text="lendResult ? 'コスト率: ' + lendResult.flyingRate + '%' : ''"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- クロス取引メモ -->
+    <div class="bg-gray-100 rounded-xl p-4 text-xs text-gray-600 space-y-1.5">
+      <div class="font-semibold text-gray-700 mb-2">クロス取引の基礎知識</div>
+      <div><span class="font-medium text-gray-700">通常クロス：</span>権利付最終日含む15営業日前の前場寄成で一般信用売り＋現物買い注文。前日19:00以降に在庫確認・予約注文。</div>
+      <div><span class="font-medium text-gray-700">フライングクロス：</span>通常クロスより1日早く（16営業日前）開始。強制決済を利用。</div>
+      <div><span class="font-medium text-gray-700">現渡し：</span>権利付最終日の18:00〜19:00以降に現渡し予約注文。翌営業日（権利落ち日）に現渡し決済。</div>
+      <div><span class="font-medium text-gray-700">貸株料（SBI）：</span>約定代金 × 3.9% ÷ 365 × 保有日数</div>
+      <div class="text-amber-700 font-medium pt-1">継続保有条件なし銘柄のみクロス取引で優待取得可能です。</div>
+    </div>
+  </div>
+
+
+  <!-- ===== 優待DB ===== -->
+  <div x-show="activeTab === 'db'" x-init="$watch('activeTab', v => { if(v==='db') loadDB(); })">
+    <!-- フィルター -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-3 mb-3">
+      <div class="flex flex-wrap gap-2 mb-3">
+        <input type="text" x-model="dbSearch" placeholder="銘柄名・コード・優待内容で検索" class="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+        <select x-model="dbFilter.month" class="border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+          <option value="all">全権利月</option>
+          <option value="1月">1月</option>
+          <option value="2月">2月</option>
+          <option value="3月">3月</option>
+          <option value="4月">4月</option>
+          <option value="5月">5月</option>
+          <option value="6月">6月</option>
+          <option value="7月">7月</option>
+          <option value="8月">8月</option>
+          <option value="9月">9月</option>
+          <option value="10月">10月</option>
+          <option value="11月">11月</option>
+          <option value="12月">12月</option>
+        </select>
+      </div>
+      <div class="flex gap-4 text-sm">
+        <label class="flex items-center gap-1.5 cursor-pointer">
+          <input type="checkbox" x-model="dbFilter.crossableOnly" class="rounded">
+          <span class="text-gray-700">一般信用○のみ</span>
+        </label>
+        <label class="flex items-center gap-1.5 cursor-pointer">
+          <input type="checkbox" x-model="dbFilter.noLongTermOnly" class="rounded">
+          <span class="text-gray-700">継続保有なしのみ</span>
+        </label>
+      </div>
+      <div class="text-xs text-gray-400 mt-2" x-text="filteredDbStocks.length + '件表示 / 全' + dbStocks.length + '件 （クロスお得度順）'"></div>
+    </div>
+
+    <!-- ローディング・エラー -->
+    <div x-show="dbLoading" class="text-center py-10 text-gray-400 text-sm">読み込み中...</div>
+    <div x-show="dbError" class="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700" x-text="dbError"></div>
+
+    <!-- 銘柄リスト -->
+    <div x-show="!dbLoading && !dbError" class="space-y-2">
+      <template x-for="s in filteredDbStocks" :key="s.code + s.rightsMonth">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-3">
+          <div class="flex items-start justify-between gap-2">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-bold text-gray-900 text-sm" x-text="s.name"></span>
+                <span class="text-xs text-gray-400 font-mono" x-text="s.code"></span>
+                <span class="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-medium" x-text="s.rightsMonth + '権利'"></span>
+                <span x-show="s.longTermRequired" class="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">長期条件あり</span>
+              </div>
+              <div class="text-xs text-gray-600 mt-1" x-text="s.benefit"></div>
+              <div class="flex gap-1.5 mt-1.5 flex-wrap">
+                <a :href="'https://finance.yahoo.co.jp/quote/' + s.code + '.T'" target="_blank" class="text-xs bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded hover:bg-purple-100 font-medium">Yahoo株価</a>
+                <a :href="'https://kabutan.jp/stock/?code=' + s.code" target="_blank" class="text-xs bg-orange-50 text-orange-700 border border-orange-200 px-2 py-0.5 rounded hover:bg-orange-100 font-medium">株探</a>
+                <a :href="'https://minkabu.jp/stock/' + s.code" target="_blank" class="text-xs bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded hover:bg-green-100 font-medium">みんかぶ</a>
+              </div>
+              <div class="flex gap-3 mt-1.5 text-xs flex-wrap">
+                <span class="text-gray-500">株価: <span class="font-medium text-gray-700" x-text="'¥' + s.price"></span></span>
+                <span class="text-gray-500">配当利回り: <span class="font-medium text-gray-700" x-text="s.dividendYield || s.dividend || '-'"></span></span>
+                <span>一般信用: <span :class="s.generalCredit === '○' ? 'text-green-600 font-bold' : 'text-red-500'" x-text="s.generalCredit || '-'"></span></span>
+                <span>制度信用: <span :class="s.institutionalCredit === '○' ? 'text-green-600 font-bold' : 'text-red-500'" x-text="s.institutionalCredit || '-'"></span></span>
+              </div>
+            </div>
+            <div class="flex flex-col items-end gap-1.5 shrink-0">
+              <div class="text-right">
+                <div class="text-xs text-gray-400">クロスお得度</div>
+                <div class="text-lg font-bold" :class="Number(s.crossScore) >= 8 ? 'text-green-600' : Number(s.crossScore) >= 6 ? 'text-blue-600' : 'text-gray-500'" x-text="s.crossScore === '対象外' ? '–' : s.crossScore"></div>
+              </div>
+              <button
+                @click="openAddFromDB(s)"
+                x-show="s.generalCredit === '○'"
+                class="text-xs bg-blue-600 text-white px-2.5 py-1.5 rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap">
+                + 登録
+              </button>
+            </div>
+          </div>
+        </div>
+      </template>
+      <div x-show="filteredDbStocks.length === 0 && !dbLoading" class="text-center py-10 text-gray-400 text-sm">条件に合う銘柄がありません</div>
+    </div>
+
+    <!-- 出典 -->
+    <div class="text-xs text-gray-400 text-center mt-4 pb-2">
+      データ出典: <a href="https://kurosan99.tokyo/" target="_blank" class="underline hover:text-gray-600">くろさんの株主優待LIFE</a>（robots.txt全許可・非商用個人利用）
+    </div>
+  </div>
+
+  <!-- 優待DBから登録モーダル -->
+  <div x-show="showAddFromDB" class="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" @click.self="showAddFromDB=false">
+    <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl p-5">
+      <h3 class="font-bold text-gray-800 mb-1" x-text="addFromDBStock ? addFromDBStock.name + '（' + addFromDBStock.code + '）' : ''"></h3>
+      <p class="text-xs text-gray-500 mb-4" x-text="addFromDBStock ? addFromDBStock.benefit : ''"></p>
+      <div class="space-y-3">
+        <div>
+          <label class="text-xs text-gray-600 block mb-1 font-medium">権利付最終日 <span class="text-red-500">*</span></label>
+          <input type="date" x-model="addFromDBForm.rightsDate" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-gray-600 block mb-1 font-medium">証券会社</label>
+            <select x-model="addFromDBForm.broker" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+              <option value="SBI">SBI証券</option>
+              <option value="MUFG">三菱UFJ eスマート</option>
+              <option value="SMBC">SMBC日興証券</option>
+              <option value="other">その他</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-gray-600 block mb-1 font-medium">信用種別</label>
+            <select x-model="addFromDBForm.creditType" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+              <option value="general">一般信用</option>
+              <option value="institutional">制度信用</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="text-xs text-gray-600 block mb-1 font-medium">メモ</label>
+          <input type="text" x-model="addFromDBForm.memo" placeholder="備考・注意事項など" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3 mt-5">
+        <button @click="showAddFromDB=false" class="w-full border border-gray-200 text-gray-600 text-sm py-2.5 rounded-xl hover:bg-gray-50">キャンセル</button>
+        <button @click="saveFromDB()" :disabled="!addFromDBForm.rightsDate" class="w-full bg-blue-600 text-white text-sm py-2.5 rounded-xl hover:bg-blue-700 font-medium disabled:opacity-40">登録する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 取引記録 ===== -->
+  <div x-show="activeTab === 'trades'">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-base font-bold text-gray-800">
+        取引記録
+        <span class="text-sm font-normal text-gray-500" x-text="'（' + trades.length + '件）'"></span>
+      </h2>
+      <button @click="openAddTrade()" x-show="stocks.length > 0" class="bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700 font-medium shadow-sm">+ 記録追加</button>
+    </div>
+
+    <!-- 損益サマリー -->
+    <div x-show="trades.length > 0" class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-4">
+      <div class="text-xs text-gray-500 mb-3 font-medium">累計損益サマリー</div>
+      <div class="grid grid-cols-3 gap-2 text-center">
+        <div class="bg-green-50 rounded-lg py-2.5 px-2">
+          <div class="text-xs text-gray-500 mb-1">優待価値合計</div>
+          <div class="font-bold text-green-700" x-text="'¥' + trades.reduce((s,t) => s + (Number(t.benefitValue)||0), 0).toLocaleString()"></div>
+        </div>
+        <div class="bg-red-50 rounded-lg py-2.5 px-2">
+          <div class="text-xs text-gray-500 mb-1">貸株料合計</div>
+          <div class="font-bold text-red-600" x-text="'¥' + trades.reduce((s,t) => s + (Number(t.actualLendFee)||0), 0).toLocaleString()"></div>
+        </div>
+        <div class="rounded-lg py-2.5 px-2" :class="totalPnL >= 0 ? 'bg-blue-50' : 'bg-orange-50'">
+          <div class="text-xs text-gray-500 mb-1">実質利益</div>
+          <div class="font-bold" :class="totalPnL >= 0 ? 'text-blue-700' : 'text-red-600'" x-text="(totalPnL >= 0 ? '+' : '') + '¥' + totalPnL.toLocaleString()"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 取引一覧 -->
+    <div class="space-y-2" x-show="trades.length > 0">
+      <template x-for="trade in trades.slice().reverse()" :key="trade.id">
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+          <div class="flex justify-between items-start gap-3">
+            <div class="flex-1 min-w-0">
+              <div class="font-semibold text-gray-900" x-text="trade.stockName + '（' + trade.stockCode + '）'"></div>
+              <div class="text-xs text-gray-500 mt-0.5" x-text="'取引日: ' + trade.date"></div>
+              <div class="grid grid-cols-2 gap-x-4 mt-2 text-xs text-gray-600">
+                <div x-show="trade.actualPrice">約定: <span class="font-medium" x-text="'¥' + Number(trade.actualPrice).toLocaleString()"></span></div>
+                <div x-show="trade.actualShares">株数: <span class="font-medium" x-text="Number(trade.actualShares).toLocaleString() + '株'"></span></div>
+                <div x-show="trade.actualDays">保有: <span class="font-medium" x-text="trade.actualDays + '日'"></span></div>
+                <div x-show="trade.actualLendFee">貸株料: <span class="font-medium text-red-600" x-text="'¥' + Number(trade.actualLendFee).toLocaleString()"></span></div>
+                <div x-show="trade.benefitReceived" class="col-span-2">取得優待: <span class="font-medium" x-text="trade.benefitReceived"></span></div>
+                <div x-show="trade.benefitValue">優待価値: <span class="font-medium text-green-700" x-text="'¥' + Number(trade.benefitValue).toLocaleString()"></span></div>
+              </div>
+              <template x-if="trade.actualLendFee && trade.benefitValue">
+                <div class="mt-2 text-xs font-bold" :class="(Number(trade.benefitValue) - Number(trade.actualLendFee)) >= 0 ? 'text-blue-700' : 'text-red-600'"
+                  x-text="'実質損益: ' + ((Number(trade.benefitValue) - Number(trade.actualLendFee)) >= 0 ? '+' : '') + '¥' + (Number(trade.benefitValue) - Number(trade.actualLendFee)).toLocaleString()">
+                </div>
+              </template>
+              <template x-if="trade.notes">
+                <div class="mt-1 text-xs text-gray-400 italic pt-1 border-t border-gray-50" x-text="trade.notes"></div>
+              </template>
+            </div>
+            <button @click="deleteTrade(trade.id)" class="text-xs bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg flex-shrink-0 transition-colors">削除</button>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- 空状態 -->
+    <div x-show="trades.length === 0" class="text-center py-16 text-gray-400">
+      <template x-if="stocks.length === 0">
+        <div>
+          <p class="font-medium text-gray-600">まず銘柄を登録してください</p>
+          <button @click="activeTab = 'stocks'" class="mt-3 text-blue-600 text-sm hover:underline">銘柄管理へ</button>
+        </div>
+      </template>
+      <template x-if="stocks.length > 0">
+        <div>
+          <p class="font-medium text-gray-600">取引記録がありません</p>
+          <p class="text-sm mt-1">完了した取引を記録しましょう</p>
+        </div>
+      </template>
+    </div>
+  </div>
+
+</main>
+
+
+<!-- ===== 銘柄追加・編集モーダル ===== -->
+<div x-show="showStockForm" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+  <div class="fixed inset-0 bg-black bg-opacity-50" @click="showStockForm = false"></div>
+  <div class="relative bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[92vh] overflow-y-auto shadow-xl">
+    <div class="sticky top-0 bg-white border-b border-gray-100 px-4 py-3.5 flex items-center justify-between z-10">
+      <h3 class="font-bold text-gray-800" x-text="editingStock ? '銘柄を編集' : '銘柄を追加'"></h3>
+      <button @click="showStockForm = false" class="text-gray-400 hover:text-gray-600 text-2xl leading-none w-8 h-8 flex items-center justify-center">&times;</button>
+    </div>
+
+    <div class="p-4 space-y-3.5">
+      <!-- 証券コード・銘柄名 -->
+      <div class="grid grid-cols-5 gap-3">
+        <div class="col-span-2">
+          <label class="text-xs text-gray-600 block mb-1 font-medium">証券コード <span class="text-red-500">*</span></label>
+          <input type="text" x-model="stockForm.code" maxlength="4" placeholder="1234" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+        </div>
+        <div class="col-span-3">
+          <label class="text-xs text-gray-600 block mb-1 font-medium">銘柄名 <span class="text-red-500">*</span></label>
+          <input type="text" x-model="stockForm.name" placeholder="〇〇株式会社" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+        </div>
+      </div>
+
+      <!-- 権利付最終日 -->
+      <div>
+        <label class="text-xs text-gray-600 block mb-1 font-medium">権利付最終日 <span class="text-red-500">*</span></label>
+        <input type="date" x-model="stockForm.rightsDate" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+      </div>
+
+      <!-- 優待内容 -->
+      <div>
+        <label class="text-xs text-gray-600 block mb-1 font-medium">優待内容</label>
+        <input type="text" x-model="stockForm.benefit" placeholder="食事券3,000円相当" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+      </div>
+
+      <!-- 優待価値 -->
+      <div>
+        <label class="text-xs text-gray-600 block mb-1 font-medium">優待価値目安（円）</label>
+        <input type="number" x-model="stockForm.benefitValue" placeholder="3000" min="0" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+      </div>
+
+      <!-- 証券会社・信用種別 -->
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-gray-600 block mb-1 font-medium">使用証券会社</label>
+          <select x-model="stockForm.broker" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+            <option value="SBI">SBI証券</option>
+            <option value="MUFG">三菱UFJ eスマート</option>
+            <option value="SMBC">SMBC日興証券</option>
+            <option value="other">その他</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-gray-600 block mb-1 font-medium">信用種別</label>
+          <select x-model="stockForm.creditType" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+            <option value="general">一般信用</option>
+            <option value="institution">制度信用</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 逆日歩リスク（制度信用のみ） -->
+      <div x-show="stockForm.creditType === 'institution'">
+        <label class="text-xs text-gray-600 block mb-1 font-medium">逆日歩リスク</label>
+        <select x-model="stockForm.gyakuhibuRisk" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+          <option value="low">低</option>
+          <option value="medium">中</option>
+          <option value="high">高</option>
+        </select>
+        <div x-show="stockForm.gyakuhibuRisk === 'high'" class="mt-1.5 text-xs bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2">
+          逆日歩リスクが高い銘柄は思わぬコストが発生する可能性があります。一般信用での実施を検討してください。
+        </div>
+      </div>
+
+      <!-- ステータス -->
+      <div>
+        <label class="text-xs text-gray-600 block mb-1 font-medium">取引ステータス</label>
+        <select x-model="stockForm.status" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+          <option value="pending">未着手</option>
+          <option value="ordered">注文済み</option>
+          <option value="delivered">現渡し済み</option>
+          <option value="done">完了</option>
+        </select>
+      </div>
+
+      <!-- 継続保有条件 -->
+      <div>
+        <label class="flex items-center gap-2.5 cursor-pointer">
+          <input type="checkbox" x-model="stockForm.continuousRequired" class="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-400">
+          <span class="text-sm text-gray-700 font-medium">継続保有条件あり</span>
+        </label>
+        <div x-show="stockForm.continuousRequired" class="mt-1.5 text-xs bg-orange-50 border border-orange-200 text-orange-700 rounded-lg px-3 py-2">
+          継続保有条件ありの銘柄はクロス取引で優待を取得できません。ダッシュボードに警告を表示します。
+        </div>
+      </div>
+
+      <!-- メモ -->
+      <div>
+        <label class="text-xs text-gray-600 block mb-1 font-medium">メモ</label>
+        <textarea x-model="stockForm.memo" rows="2" placeholder="備考・注意事項など" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"></textarea>
+      </div>
+    </div>
+
+    <div class="sticky bottom-0 bg-white border-t border-gray-100 p-4 flex gap-3">
+      <button @click="showStockForm = false" class="flex-1 border border-gray-200 text-gray-600 text-sm py-2.5 rounded-lg hover:bg-gray-50 font-medium">キャンセル</button>
+      <button @click="saveStock()" class="flex-1 bg-blue-600 text-white text-sm py-2.5 rounded-lg hover:bg-blue-700 font-semibold shadow-sm" x-text="editingStock ? '更新する' : '追加する'"></button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ===== 取引記録モーダル ===== -->
+<div x-show="showTradeForm" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+  <div class="fixed inset-0 bg-black bg-opacity-50" @click="showTradeForm = false"></div>
+  <div class="relative bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[92vh] overflow-y-auto shadow-xl">
+    <div class="sticky top-0 bg-white border-b border-gray-100 px-4 py-3.5 flex items-center justify-between z-10">
+      <h3 class="font-bold text-gray-800">取引記録を追加</h3>
+      <button @click="showTradeForm = false" class="text-gray-400 hover:text-gray-600 text-2xl leading-none w-8 h-8 flex items-center justify-center">&times;</button>
+    </div>
+
+    <div class="p-4 space-y-3.5">
+      <!-- 銘柄選択 -->
+      <div>
+        <label class="text-xs text-gray-600 block mb-1 font-medium">銘柄 <span class="text-red-500">*</span></label>
+        <select x-model="tradeForm.stockId" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+          <template x-for="s in stocks" :key="s.id">
+            <option :value="s.id" x-text="s.name + '（' + s.code + '）'"></option>
+          </template>
+        </select>
+      </div>
+
+      <!-- 約定情報 -->
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-gray-600 block mb-1 font-medium">約定価格（円）</label>
+          <input type="number" x-model="tradeForm.actualPrice" placeholder="1000" min="0" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+        </div>
+        <div>
+          <label class="text-xs text-gray-600 block mb-1 font-medium">株数</label>
+          <input type="number" x-model="tradeForm.actualShares" placeholder="100" min="0" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+        </div>
+        <div>
+          <label class="text-xs text-gray-600 block mb-1 font-medium">実際の保有日数</label>
+          <input type="number" x-model="tradeForm.actualDays" placeholder="15" min="1" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+        </div>
+        <div>
+          <label class="text-xs text-gray-600 block mb-1 font-medium">実際の貸株料（円）</label>
+          <input type="number" x-model="tradeForm.actualLendFee" placeholder="200" min="0" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+        </div>
+      </div>
+
+      <!-- 優待情報 -->
+      <div>
+        <label class="text-xs text-gray-600 block mb-1 font-medium">取得優待（内容）</label>
+        <input type="text" x-model="tradeForm.benefitReceived" placeholder="食事券3,000円" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+      </div>
+      <div>
+        <label class="text-xs text-gray-600 block mb-1 font-medium">優待評価額（円）</label>
+        <input type="number" x-model="tradeForm.benefitValue" placeholder="3000" min="0" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+      </div>
+
+      <!-- 損益プレビュー -->
+      <div x-show="tradeForm.actualLendFee && tradeForm.benefitValue" class="bg-gray-50 rounded-lg p-3 text-xs">
+        <span class="text-gray-500">実質損益プレビュー: </span>
+        <span class="font-bold" :class="(Number(tradeForm.benefitValue) - Number(tradeForm.actualLendFee)) >= 0 ? 'text-green-700' : 'text-red-600'"
+          x-text="((Number(tradeForm.benefitValue) - Number(tradeForm.actualLendFee)) >= 0 ? '+' : '') + '¥' + (Number(tradeForm.benefitValue) - Number(tradeForm.actualLendFee)).toLocaleString()">
+        </span>
+      </div>
+
+      <!-- メモ -->
+      <div>
+        <label class="text-xs text-gray-600 block mb-1 font-medium">メモ</label>
+        <textarea x-model="tradeForm.notes" rows="2" placeholder="備考など" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"></textarea>
+      </div>
+    </div>
+
+    <div class="sticky bottom-0 bg-white border-t border-gray-100 p-4 flex gap-3">
+      <button @click="showTradeForm = false" class="flex-1 border border-gray-200 text-gray-600 text-sm py-2.5 rounded-lg hover:bg-gray-50 font-medium">キャンセル</button>
+      <button @click="saveTrade()" class="flex-1 bg-blue-600 text-white text-sm py-2.5 rounded-lg hover:bg-blue-700 font-semibold shadow-sm">記録する</button>
+    </div>
+  </div>
+</div>
+
+
+
+<script>
+const STOCKS_DATA = [{"name":"平和堂","code":"8276","rightsMonth":"2月・8月","longTermRequired":true,"price":"2,944","dividendYield":"2.25%","benefitScore":"5","crossScore":"6","benefit":"買物券、ギフトカード","generalCredit":"○","institutionalCredit":"○"},{"name":"ザ・パック","code":"3950","rightsMonth":"6月・12月","longTermRequired":false,"price":"1,169","dividendYield":"3.55%","benefitScore":"6","crossScore":"7","benefit":"クオカード、図書カード","generalCredit":"○","institutionalCredit":"○"},{"name":"北の達人","code":"2930","rightsMonth":"2月","longTermRequired":true,"price":"147","dividendYield":"2.38%","benefitScore":"5","crossScore":"10","benefit":"化粧品、通販割引券","generalCredit":"○","institutionalCredit":"○"},{"name":"楽天グループ","code":"4755","rightsMonth":"12月","longTermRequired":false,"price":"941","dividendYield":"0.00%","benefitScore":"8","crossScore":"10","benefit":"楽天モバイル1年間無料","generalCredit":"○","institutionalCredit":"○"},{"name":"富士電機","code":"6504","rightsMonth":"6月","longTermRequired":false,"price":"9,964","dividendYield":"0.00%","benefitScore":"3","crossScore":"3","benefit":"壁掛けカレンダー（1株優待）","generalCredit":"○","institutionalCredit":"○"},{"name":"オロ","code":"3983","rightsMonth":"12月","longTermRequired":true,"price":"2,715","dividendYield":"1.86%","benefitScore":"8","crossScore":"9","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"くら寿司","code":"2695","rightsMonth":"4月","longTermRequired":false,"price":"4,050","dividendYield":"0.50%","benefitScore":"7","crossScore":"7","benefit":"食事券","generalCredit":"○","institutionalCredit":"○"},{"name":"フジオフード","code":"2752","rightsMonth":"6月・12月","longTermRequired":false,"price":"1,172","dividendYield":"0.25%","benefitScore":"8","crossScore":"10","benefit":"食事券、お米、ビール","generalCredit":"○","institutionalCredit":"○"},{"name":"ウイン・パートナーズ","code":"3183","rightsMonth":"3月","longTermRequired":false,"price":"1,339","dividendYield":"3.96%","benefitScore":"6","crossScore":"6","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"JMホールディングス","code":"3539","rightsMonth":"7月","longTermRequired":true,"price":"2,876","dividendYield":"1.67%","benefitScore":"6","crossScore":"8","benefit":"食品、お肉","generalCredit":"○","institutionalCredit":"○"},{"name":"キリンホールディングス","code":"2503","rightsMonth":"12月","longTermRequired":true,"price":"2,187","dividendYield":"3.44%","benefitScore":"7","crossScore":"2","benefit":"お酒","generalCredit":"○","institutionalCredit":"○"},{"name":"ウエスコHD","code":"6091","rightsMonth":"7月","longTermRequired":false,"price":"816","dividendYield":"3.44%","benefitScore":"6","crossScore":"対象外","benefit":"水族館入場券","generalCredit":"×","institutionalCredit":"×"},{"name":"FOOD&LIFE COMPANIES","code":"3563","rightsMonth":"3月・9月","longTermRequired":true,"price":"7,786","dividendYield":"0.38%","benefitScore":"6","crossScore":"8","benefit":"スシロー食事券","generalCredit":"○","institutionalCredit":"○"},{"name":"IK HD","code":"2722","rightsMonth":"5月","longTermRequired":true,"price":"455","dividendYield":"1.96%","benefitScore":"3","crossScore":"5","benefit":"自社商品、自社サイトポイント","generalCredit":"×","institutionalCredit":"○"},{"name":"ヒューリック","code":"3003","rightsMonth":"12月","longTermRequired":true,"price":"1,614","dividendYield":"3.53%","benefitScore":"7","crossScore":"7","benefit":"グルメカタログギフト","generalCredit":"○","institutionalCredit":"○"},{"name":"ヤマハ発動機","code":"7272","rightsMonth":"12月","longTermRequired":true,"price":"1,120","dividendYield":"4.45%","benefitScore":"8","crossScore":"8","benefit":"カタログギフト","generalCredit":"○","institutionalCredit":"○"},{"name":"椿本興業","code":"8052","rightsMonth":"3月・9月","longTermRequired":true,"price":"2,953","dividendYield":"2.73%","benefitScore":"7","crossScore":"9","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"MHグループ","code":"9439","rightsMonth":"6月","longTermRequired":true,"price":"217","dividendYield":"0.23%","benefitScore":"2","crossScore":"対象外","benefit":"割引券","generalCredit":"×","institutionalCredit":"×"},{"name":"アークス","code":"9948","rightsMonth":"2月","longTermRequired":false,"price":"3,135","dividendYield":"2.35%","benefitScore":"8","crossScore":"9","benefit":"ギフトカード、りんご、リンゴジュース","generalCredit":"○","institutionalCredit":"○"},{"name":"ウィルグループ","code":"6089","rightsMonth":"3月","longTermRequired":true,"price":"961","dividendYield":"4.55%","benefitScore":"7","crossScore":"10","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"トーセイ","code":"8923","rightsMonth":"11月","longTermRequired":true,"price":"3,420","dividendYield":"2.88%","benefitScore":"9","crossScore":"10","benefit":"クオカード＆ホテル割引","generalCredit":"○","institutionalCredit":"○"},{"name":"博展","code":"2173","rightsMonth":"12月","longTermRequired":true,"price":"690","dividendYield":"3.24%","benefitScore":"6","crossScore":"6","benefit":"JCBパレモカード","generalCredit":"×","institutionalCredit":"○"},{"name":"アスクル","code":"2678","rightsMonth":"5月・11月","longTermRequired":false,"price":"1,595","dividendYield":"2.41%","benefitScore":"7","crossScore":"9","benefit":"買物割引券","generalCredit":"○","institutionalCredit":"○"},{"name":"テンアライド","code":"8207","rightsMonth":"3月・9月","longTermRequired":true,"price":"291","dividendYield":"0.00%","benefitScore":"7","crossScore":"対象外","benefit":"食事券","generalCredit":"×","institutionalCredit":"×"},{"name":"中山福","code":"7442","rightsMonth":"3月","longTermRequired":true,"price":"415","dividendYield":"2.43%","benefitScore":"7","crossScore":"9","benefit":"カタログギフト","generalCredit":"×","institutionalCredit":"○"},{"name":"アステナHD","code":"8095","rightsMonth":"11月","longTermRequired":true,"price":"514","dividendYield":"3.47%","benefitScore":"7","crossScore":"7","benefit":"カタログギフト","generalCredit":"○","institutionalCredit":"○"},{"name":"ナガワ","code":"9663","rightsMonth":"3月","longTermRequired":false,"price":"6,940","dividendYield":"1.47%","benefitScore":"8","crossScore":"10","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"電算システムHD","code":"4072","rightsMonth":"12月","longTermRequired":true,"price":"3,305","dividendYield":"2.42%","benefitScore":"8","crossScore":"8","benefit":"カタログギフト","generalCredit":"○","institutionalCredit":"○"},{"name":"NATTY SWANKY","code":"7674","rightsMonth":"1月・7月","longTermRequired":false,"price":"3,130","dividendYield":"0.00%","benefitScore":"7","crossScore":"対象外","benefit":"ダンダダン食事券・冷凍餃子","generalCredit":"×","institutionalCredit":"×"},{"name":"サイバーエージェント","code":"4751","rightsMonth":"9月","longTermRequired":false,"price":"1,833","dividendYield":"0.94%","benefitScore":"6","crossScore":"8","benefit":"ABEMAプレミア無料","generalCredit":"○","institutionalCredit":"○"},{"name":"ワールド","code":"3612","rightsMonth":"2月・8月","longTermRequired":true,"price":"3,100","dividendYield":"3.48%","benefitScore":"7","crossScore":"9","benefit":"買物券（アパレル）","generalCredit":"○","institutionalCredit":"○"},{"name":"アイスタイル","code":"3660","rightsMonth":"6月","longTermRequired":false,"price":"524","dividendYield":"0.19%","benefitScore":"6","crossScore":"9","benefit":"アットコスメ割引券","generalCredit":"○","institutionalCredit":"○"},{"name":"フジ","code":"8278","rightsMonth":"2月・8月","longTermRequired":true,"price":"2,018","dividendYield":"1.49%","benefitScore":"7","crossScore":"9","benefit":"イオン買物券、カタログギフト","generalCredit":"○","institutionalCredit":"○"},{"name":"松竹","code":"9601","rightsMonth":"2月・8月","longTermRequired":false,"price":"12,680","dividendYield":"0.24%","benefitScore":"7","crossScore":"7","benefit":"映画・演劇無料ポイント","generalCredit":"○","institutionalCredit":"○"},{"name":"キューピー","code":"2809","rightsMonth":"11月","longTermRequired":true,"price":"4,208","dividendYield":"1.53%","benefitScore":"7","crossScore":"9","benefit":"食品","generalCredit":"○","institutionalCredit":"○"},{"name":"岡部","code":"5959","rightsMonth":"12月","longTermRequired":true,"price":"933","dividendYield":"4.36%","benefitScore":"6","crossScore":"7","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"セブン＆アイ","code":"3382","rightsMonth":"2月","longTermRequired":true,"price":"1,975","dividendYield":"2.53%","benefitScore":"6","crossScore":"7","benefit":"セブングループ商品券","generalCredit":"○","institutionalCredit":"○"},{"name":"北浜キャピタルP","code":"2134","rightsMonth":"3月","longTermRequired":false,"price":"51","dividendYield":"0.00%","benefitScore":"9","crossScore":"対象外","benefit":"クオカード（隠れ優待）","generalCredit":"×","institutionalCredit":"×"},{"name":"長府製作所","code":"5946","rightsMonth":"12月","longTermRequired":true,"price":"1,914","dividendYield":"2.39%","benefitScore":"6","crossScore":"7","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"ジー・スリーHD","code":"3647","rightsMonth":"8月","longTermRequired":false,"price":"160","dividendYield":"0.00%","benefitScore":"7","crossScore":"対象外","benefit":"クオカード（隠れ優待）","generalCredit":"×","institutionalCredit":"×"},{"name":"都築電気","code":"8157","rightsMonth":"9月","longTermRequired":true,"price":"3,290","dividendYield":"3.05%","benefitScore":"6","crossScore":"7","benefit":"クオカード、カタログギフト","generalCredit":"○","institutionalCredit":"○"},{"name":"東計電算","code":"4746","rightsMonth":"12月","longTermRequired":false,"price":"4,110","dividendYield":"3.04%","benefitScore":"5","crossScore":"6","benefit":"お米券","generalCredit":"○","institutionalCredit":"○"},{"name":"ピックルスHD","code":"2935","rightsMonth":"2月","longTermRequired":false,"price":"1,048","dividendYield":"2.59%","benefitScore":"5","crossScore":"6","benefit":"漬物など","generalCredit":"○","institutionalCredit":"×"},{"name":"昭文社HD","code":"9475","rightsMonth":"3月","longTermRequired":false,"price":"422","dividendYield":"0.00%","benefitScore":"6","crossScore":"6","benefit":"自社サイトポイント","generalCredit":"×","institutionalCredit":"○"},{"name":"オンワード","code":"8016","rightsMonth":"2月","longTermRequired":true,"price":"685","dividendYield":"4.42%","benefitScore":"6","crossScore":"9","benefit":"カタログギフト、ECサイト割引券","generalCredit":"○","institutionalCredit":"○"},{"name":"チムニー","code":"3178","rightsMonth":"3月・9月","longTermRequired":false,"price":"1,320","dividendYield":"0.76%","benefitScore":"7","crossScore":"対象外","benefit":"はなの舞、さかなや道場などの食事券","generalCredit":"×","institutionalCredit":"×"},{"name":"ジャパンクラフトHD","code":"7135","rightsMonth":"6月・12月","longTermRequired":true,"price":"230","dividendYield":"1.31%","benefitScore":"8","crossScore":"7","benefit":"買物券（手芸品）","generalCredit":"×","institutionalCredit":"○"},{"name":"しまむら","code":"8227","rightsMonth":"2月","longTermRequired":false,"price":"11,290","dividendYield":"1.83%","benefitScore":"6","crossScore":"7","benefit":"買物券","generalCredit":"○","institutionalCredit":"○"},{"name":"高松コンストラクションG","code":"1762","rightsMonth":"3月","longTermRequired":true,"price":"3,400","dividendYield":"2.67%","benefitScore":"7","crossScore":"7","benefit":"お米、お米券","generalCredit":"○","institutionalCredit":"○"},{"name":"日本管財","code":"9347","rightsMonth":"3月・9月","longTermRequired":true,"price":"2,784","dividendYield":"1.94%","benefitScore":"7","crossScore":"7","benefit":"カタログギフト","generalCredit":"○","institutionalCredit":"○"},{"name":"神戸物産","code":"3038","rightsMonth":"10月","longTermRequired":true,"price":"4,183","dividendYield":"0.61%","benefitScore":"7","crossScore":"9","benefit":"金券類","generalCredit":"○","institutionalCredit":"○"},{"name":"朝日放送","code":"9405","rightsMonth":"3月・9月","longTermRequired":false,"price":"789","dividendYield":"1.77%","benefitScore":"6","crossScore":"8","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"江崎グリコ","code":"2206","rightsMonth":"6月","longTermRequired":true,"price":"5,150","dividendYield":"1.86%","benefitScore":"4","crossScore":"6","benefit":"お菓子詰め合わせ","generalCredit":"○","institutionalCredit":"○"},{"name":"SBIグローバルAM","code":"4765","rightsMonth":"3月","longTermRequired":true,"price":"647","dividendYield":"0.00%","benefitScore":"7","crossScore":"10","benefit":"仮想通貨、株式新聞","generalCredit":"○","institutionalCredit":"○"},{"name":"トリドールHD","code":"3397","rightsMonth":"3月・9月","longTermRequired":true,"price":"5,079","dividendYield":"0.22%","benefitScore":"7","crossScore":"9","benefit":"食事ポイント","generalCredit":"○","institutionalCredit":"○"},{"name":"クスリのアオキHD","code":"3549","rightsMonth":"5月","longTermRequired":false,"price":"3,992","dividendYield":"0.40%","benefitScore":"8","crossScore":"10","benefit":"買物券、買物割引カード、カタログギフトなど","generalCredit":"○","institutionalCredit":"○"},{"name":"ナイガイ","code":"8013","rightsMonth":"1月","longTermRequired":true,"price":"411","dividendYield":"0.00%","benefitScore":"7","crossScore":"対象外","benefit":"靴下などのアパレル品","generalCredit":"×","institutionalCredit":"○"},{"name":"ミニストップ","code":"9946","rightsMonth":"2月・8月","longTermRequired":false,"price":"2,035","dividendYield":"0.99%","benefitScore":"7","crossScore":"8","benefit":"ミニストップソフトクリーム","generalCredit":"○","institutionalCredit":"○"},{"name":"ノジマ","code":"7419","rightsMonth":"3月・9月","longTermRequired":false,"price":"3,720","dividendYield":"1.23%","benefitScore":"5","crossScore":"6","benefit":"買物券など","generalCredit":"○","institutionalCredit":"○"},{"name":"TBK","code":"7277","rightsMonth":"3月","longTermRequired":true,"price":"342","dividendYield":"2.31%","benefitScore":"6","crossScore":"7","benefit":"クオカード・お米","generalCredit":"×","institutionalCredit":"○"},{"name":"大倉工業","code":"4221","rightsMonth":"12月","longTermRequired":false,"price":"5,230","dividendYield":"3.76%","benefitScore":"7","crossScore":"7","benefit":"クオカード、食事券","generalCredit":"○","institutionalCredit":"○"},{"name":"ロイヤルホールディングス","code":"8179","rightsMonth":"6月・12月","longTermRequired":false,"price":"2,686","dividendYield":"1.17%","benefitScore":"6","crossScore":"6","benefit":"食事券、ホテル宿泊券","generalCredit":"○","institutionalCredit":"○"},{"name":"コジマ","code":"7513","rightsMonth":"2月・8月","longTermRequired":true,"price":"1,172","dividendYield":"1.71%","benefitScore":"9","crossScore":"9","benefit":"ビックカメラ買物券","generalCredit":"○","institutionalCredit":"○"},{"name":"メック","code":"4971","rightsMonth":"12月","longTermRequired":false,"price":"3,275","dividendYield":"1.66%","benefitScore":"6","crossScore":"7","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"スクロール","code":"8005","rightsMonth":"3月","longTermRequired":true,"price":"1,171","dividendYield":"5.05%","benefitScore":"6","crossScore":"8","benefit":"通販ポイント","generalCredit":"○","institutionalCredit":"○"},{"name":"東建コーポレーション","code":"1766","rightsMonth":"4月","longTermRequired":false,"price":"14,970","dividendYield":"2.41%","benefitScore":"5","crossScore":"6","benefit":"通販割引券、ゴルフ割引券","generalCredit":"○","institutionalCredit":"○"},{"name":"パルグループHD","code":"2726","rightsMonth":"2月","longTermRequired":false,"price":"2,846","dividendYield":"1.06%","benefitScore":"4","crossScore":"5","benefit":"宿泊割引券","generalCredit":"○","institutionalCredit":"○"},{"name":"まんだらけ","code":"2652","rightsMonth":"3月・9月","longTermRequired":true,"price":"319","dividendYield":"0.32%","benefitScore":"7","crossScore":"7","benefit":"買物券（ゲーム）","generalCredit":"×","institutionalCredit":"○"},{"name":"ニチバン","code":"4218","rightsMonth":"9月","longTermRequired":true,"price":"1,982","dividendYield":"2.02%","benefitScore":"6","crossScore":"9","benefit":"自社商品詰め合わせ","generalCredit":"○","institutionalCredit":"○"},{"name":"アダストリア","code":"2685","rightsMonth":"2月・8月","longTermRequired":true,"price":"3,185","dividendYield":"2.84%","benefitScore":"6","crossScore":"8","benefit":"買物券（アパレル）、食事券","generalCredit":"○","institutionalCredit":"○"},{"name":"ライトオン","code":"7445","rightsMonth":"8月","longTermRequired":false,"price":"282","dividendYield":"0.00%","benefitScore":"6","crossScore":"6","benefit":"ライトオンの買物券","generalCredit":"×","institutionalCredit":"×"},{"name":"ＷＯＷＯＷ","code":"4839","rightsMonth":"9月","longTermRequired":true,"price":"1,832","dividendYield":"1.78%","benefitScore":"6","crossScore":"8","benefit":"WOWOW無料視聴、クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"ラックランド","code":"9612","rightsMonth":"2月・8月","longTermRequired":false,"price":"1,276","dividendYield":"0.00%","benefitScore":"5","crossScore":"8","benefit":"東北地方名産品","generalCredit":"○","institutionalCredit":"×"},{"name":"アークランズ","code":"9842","rightsMonth":"2月・8月","longTermRequired":false,"price":"1,904","dividendYield":"2.10%","benefitScore":"7","crossScore":"7","benefit":"食事券、買物券","generalCredit":"○","institutionalCredit":"○"},{"name":"木曽路","code":"8160","rightsMonth":"3月・9月","longTermRequired":false,"price":"2,530","dividendYield":"1.18%","benefitScore":"7","crossScore":"8","benefit":"木曽路、くいどんなどの食事券","generalCredit":"○","institutionalCredit":"○"},{"name":"マーチャント・バンカーズ","code":"3121","rightsMonth":"4月・10月","longTermRequired":true,"price":"270","dividendYield":"0.74%","benefitScore":"6","crossScore":"8","benefit":"クオカード、ホテル宿泊無料サービス","generalCredit":"×","institutionalCredit":"○"},{"name":"ＴＰＲ","code":"6463","rightsMonth":"3月","longTermRequired":true,"price":"2,454","dividendYield":"4.11%","benefitScore":"6","crossScore":"8","benefit":"お米券","generalCredit":"○","institutionalCredit":"○"},{"name":"ソフィアHD","code":"6942","rightsMonth":"3月・9月","longTermRequired":false,"price":"1,255","dividendYield":"0.00%","benefitScore":"7","crossScore":"対象外","benefit":"キルフェボンギフトカードなど","generalCredit":"×","institutionalCredit":"×"},{"name":"クラウドワークス","code":"3900","rightsMonth":"12月","longTermRequired":true,"price":"1,015","dividendYield":"0.00%","benefitScore":"8","crossScore":"8","benefit":"クオカード","generalCredit":"×","institutionalCredit":"○"},{"name":"キユーソー流通システム","code":"9369","rightsMonth":"11月","longTermRequired":true,"price":"3,360","dividendYield":"0.84%","benefitScore":"6","crossScore":"6","benefit":"ジェフグルメカード","generalCredit":"○","institutionalCredit":"○"},{"name":"セントケアHD","code":"2374","rightsMonth":"3月","longTermRequired":true,"price":"821","dividendYield":"3.83%","benefitScore":"7","crossScore":"8","benefit":"クオカード","generalCredit":"○","institutionalCredit":"×"},{"name":"メドレックス","code":"4586","rightsMonth":"12月","longTermRequired":false,"price":"95","dividendYield":"0.00%","benefitScore":"9","crossScore":"対象外","benefit":"クオカード（隠れ優待）","generalCredit":"×","institutionalCredit":"×"},{"name":"クオールHD","code":"3034","rightsMonth":"3月","longTermRequired":true,"price":"2,078","dividendYield":"2.23%","benefitScore":"7","crossScore":"8","benefit":"化粧品、健康食品のPB商品を選択","generalCredit":"○","institutionalCredit":"○"},{"name":"セントラルスポーツ","code":"4801","rightsMonth":"3月・9月","longTermRequired":false,"price":"2,568","dividendYield":"1.57%","benefitScore":"8","crossScore":"10","benefit":"スポーツジム利用券","generalCredit":"○","institutionalCredit":"×"},{"name":"Ｈａｍｅｅ","code":"3134","rightsMonth":"4月・10月","longTermRequired":false,"price":"1,451","dividendYield":"1.55%","benefitScore":"6","crossScore":"6","benefit":"「iFace」「ByUR」の買物券","generalCredit":"○","institutionalCredit":"○"},{"name":"共立メンテナンス","code":"9616","rightsMonth":"3月・9月","longTermRequired":true,"price":"3,381","dividendYield":"1.38%","benefitScore":"6","crossScore":"7","benefit":"食事券、ホテル宿泊割引など","generalCredit":"○","institutionalCredit":"○"},{"name":"日本ハウスHD","code":"1873","rightsMonth":"4月","longTermRequired":false,"price":"313","dividendYield":"3.57%","benefitScore":"7","crossScore":"7","benefit":"食品","generalCredit":"○","institutionalCredit":"×"},{"name":"フォーバル","code":"8275","rightsMonth":"9月","longTermRequired":false,"price":"1,409","dividendYield":"2.24%","benefitScore":"7","crossScore":"10","benefit":"電子マネー","generalCredit":"○","institutionalCredit":"○"},{"name":"ライオン","code":"4912","rightsMonth":"12月","longTermRequired":true,"price":"1,618","dividendYield":"1.86%","benefitScore":"7","crossScore":"9","benefit":"日用品","generalCredit":"○","institutionalCredit":"○"},{"name":"丸三証券","code":"8613","rightsMonth":"3月","longTermRequired":false,"price":"977","dividendYield":"0.00%","benefitScore":"5","crossScore":"6","benefit":"海苔・お米","generalCredit":"○","institutionalCredit":"○"},{"name":"東京都競馬","code":"9672","rightsMonth":"12月","longTermRequired":true,"price":"5,250","dividendYield":"2.09%","benefitScore":"9","crossScore":"10","benefit":"サマーランド入場券","generalCredit":"○","institutionalCredit":"○"},{"name":"ネットプロテクションズ","code":"7383","rightsMonth":"3月","longTermRequired":false,"price":"899","dividendYield":"0.00%","benefitScore":"5","crossScore":"6","benefit":"NPポイント","generalCredit":"○","institutionalCredit":"○"},{"name":"カーブス","code":"7085","rightsMonth":"8月","longTermRequired":false,"price":"831","dividendYield":"2.06%","benefitScore":"7","crossScore":"8","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"いちご","code":"2337","rightsMonth":"2月・8月","longTermRequired":false,"price":"437","dividendYield":"2.63%","benefitScore":"5","crossScore":"5","benefit":"サッカー観戦抽選権利","generalCredit":"○","institutionalCredit":"○"},{"name":"スタジオアリス","code":"2305","rightsMonth":"8月","longTermRequired":false,"price":"2,099","dividendYield":"2.37%","benefitScore":"7","crossScore":"10","benefit":"写真撮影券","generalCredit":"○","institutionalCredit":"○"},{"name":"ヒト・コミュニケーションズ","code":"4433","rightsMonth":"8月","longTermRequired":false,"price":"1,125","dividendYield":"3.28%","benefitScore":"7","crossScore":"8","benefit":"ギフトカード","generalCredit":"○","institutionalCredit":"×"},{"name":"ヤーマン","code":"6630","rightsMonth":"4月","longTermRequired":true,"price":"828","dividendYield":"3.33%","benefitScore":"5","crossScore":"7","benefit":"通販ポイント","generalCredit":"○","institutionalCredit":"○"},{"name":"文教堂グループHD","code":"9978","rightsMonth":"2月・8月","longTermRequired":false,"price":"56","dividendYield":"0.00%","benefitScore":"2","crossScore":"対象外","benefit":"買物割引カード","generalCredit":"×","institutionalCredit":"×"},{"name":"FPパートナー","code":"7388","rightsMonth":"5月・11月","longTermRequired":false,"price":"2,179","dividendYield":"4.27%","benefitScore":"7","crossScore":"9","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"フェリシモ","code":"3396","rightsMonth":"8月","longTermRequired":true,"price":"847","dividendYield":"2.37%","benefitScore":"7","crossScore":"対象外","benefit":"カタログギフト","generalCredit":"×","institutionalCredit":"×"},{"name":"一家 HD","code":"7127","rightsMonth":"3月・9月","longTermRequired":false,"price":"720","dividendYield":"0.00%","benefitScore":"6","crossScore":"対象外","benefit":"食事券","generalCredit":"×","institutionalCredit":"×"},{"name":"エコス","code":"7520","rightsMonth":"2月・8月","longTermRequired":false,"price":"2,822","dividendYield":"2.51%","benefitScore":"6","crossScore":"8","benefit":"お米、買物券（スーパー）","generalCredit":"○","institutionalCredit":"○"},{"name":"新東工業","code":"6339","rightsMonth":"9月","longTermRequired":true,"price":"1,017","dividendYield":"4.39%","benefitScore":"7","crossScore":"9","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"ＤＤグループ","code":"3073","rightsMonth":"2月・8月","longTermRequired":true,"price":"1,691","dividendYield":"0.00%","benefitScore":"8","crossScore":"対象外","benefit":"食事券","generalCredit":"×","institutionalCredit":"×"},{"name":"ダブルエー","code":"7683","rightsMonth":"1月・7月","longTermRequired":false,"price":"1,302","dividendYield":"1.29%","benefitScore":"8","crossScore":"対象外","benefit":"お好きな靴やバッグ1点","generalCredit":"×","institutionalCredit":"×"},{"name":"幸楽苑","code":"7554","rightsMonth":"3月","longTermRequired":false,"price":"1,069","dividendYield":"0.00%","benefitScore":"6","crossScore":"8","benefit":"幸楽苑の食事券","generalCredit":"○","institutionalCredit":"○"},{"name":"NSD","code":"9759","rightsMonth":"9月","longTermRequired":true,"price":"3,308","dividendYield":"2.70%","benefitScore":"5","crossScore":"7","benefit":"クオカード、カタログギフト","generalCredit":"○","institutionalCredit":"○"},{"name":"ブックオフグループHD","code":"9278","rightsMonth":"5月","longTermRequired":true,"price":"1,583","dividendYield":"1.91%","benefitScore":"7","crossScore":"7","benefit":"買物券","generalCredit":"○","institutionalCredit":"○"},{"name":"G-FACTORY","code":"3474","rightsMonth":"12月","longTermRequired":false,"price":"671","dividendYield":"0.00%","benefitScore":"6","crossScore":"対象外","benefit":"食事券（宇奈とと）","generalCredit":"×","institutionalCredit":"×"},{"name":"壱番屋","code":"7630","rightsMonth":"2月・8月","longTermRequired":false,"price":"942","dividendYield":"1.70%","benefitScore":"7","crossScore":"8","benefit":"ココイチ食事券","generalCredit":"○","institutionalCredit":"○"},{"name":"パルマ","code":"3461","rightsMonth":"9月","longTermRequired":true,"price":"613","dividendYield":"2.14%","benefitScore":"7","crossScore":"対象外","benefit":"クオカード","generalCredit":"×","institutionalCredit":"×"},{"name":"U-NEXT HOLDINGS","code":"9418","rightsMonth":"2月・8月","longTermRequired":false,"price":"2,140","dividendYield":"0.65%","benefitScore":"6","crossScore":"9","benefit":"U-NEXT月額無料","generalCredit":"○","institutionalCredit":"○"},{"name":"SRSホールディングス","code":"8163","rightsMonth":"3月・9月","longTermRequired":false,"price":"1,269","dividendYield":"0.79%","benefitScore":"3","crossScore":"5","benefit":"食事券","generalCredit":"○","institutionalCredit":"○"},{"name":"ヤマウラ","code":"1780","rightsMonth":"3月","longTermRequired":false,"price":"1,438","dividendYield":"1.82%","benefitScore":"9","crossScore":"10","benefit":"カタログギフト","generalCredit":"○","institutionalCredit":"○"},{"name":"アインHD","code":"9627","rightsMonth":"4月","longTermRequired":false,"price":"7,072","dividendYield":"1.16%","benefitScore":"6","crossScore":"7","benefit":"アインズ、Francfrancの買物券","generalCredit":"○","institutionalCredit":"○"},{"name":"テラスカイ","code":"3915","rightsMonth":"2月","longTermRequired":false,"price":"2,130","dividendYield":"0.00%","benefitScore":"7","crossScore":"8","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"新日本製薬","code":"4931","rightsMonth":"9月","longTermRequired":true,"price":"2,300","dividendYield":"2.26%","benefitScore":"6","crossScore":"7","benefit":"化粧品、健康食品","generalCredit":"○","institutionalCredit":"○"},{"name":"ＴＳＩホールディングス","code":"3608","rightsMonth":"2月・8月","longTermRequired":true,"price":"1,135","dividendYield":"3.54%","benefitScore":"5","crossScore":"6","benefit":"アパレルECサイト割引券・カタログギフト","generalCredit":"○","institutionalCredit":"○"},{"name":"イオン北海道","code":"7512","rightsMonth":"2月","longTermRequired":true,"price":"911","dividendYield":"1.76%","benefitScore":"6","crossScore":"9","benefit":"イオン買物券","generalCredit":"○","institutionalCredit":"○"},{"name":"コシダカHD","code":"2157","rightsMonth":"8月","longTermRequired":true,"price":"1,430","dividendYield":"1.68%","benefitScore":"7","crossScore":"9","benefit":"カラオケ・温泉利用券","generalCredit":"○","institutionalCredit":"○"},{"name":"トレジャー・ファクトリー","code":"3093","rightsMonth":"2月","longTermRequired":false,"price":"2,098","dividendYield":"1.87%","benefitScore":"6","crossScore":"6","benefit":"買物割引券","generalCredit":"○","institutionalCredit":"○"},{"name":"進和","code":"7607","rightsMonth":"8月","longTermRequired":true,"price":"3,375","dividendYield":"3.34%","benefitScore":"6","crossScore":"7","benefit":"お米","generalCredit":"○","institutionalCredit":"○"},{"name":"ＧＳＩクレオス","code":"8101","rightsMonth":"9月","longTermRequired":true,"price":"2,400","dividendYield":"4.16%","benefitScore":"6","crossScore":"7","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"アース製薬","code":"4985","rightsMonth":"6月・12月","longTermRequired":true,"price":"5,290","dividendYield":"2.36%","benefitScore":"5","crossScore":"6","benefit":"入浴剤、虫よけなど商品詰め合わせ","generalCredit":"○","institutionalCredit":"○"},{"name":"泉州電業","code":"9824","rightsMonth":"10月","longTermRequired":true,"price":"4,385","dividendYield":"3.47%","benefitScore":"6","crossScore":"7","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"ヨシックスHD","code":"3221","rightsMonth":"3月・9月","longTermRequired":false,"price":"2,652","dividendYield":"1.06%","benefitScore":"6","crossScore":"7","benefit":"食事券","generalCredit":"○","institutionalCredit":"○"},{"name":"オークワ","code":"8217","rightsMonth":"2月","longTermRequired":false,"price":"955","dividendYield":"2.72%","benefitScore":"6","crossScore":"7","benefit":"ギフトカード","generalCredit":"○","institutionalCredit":"○"},{"name":"プロクレアHD","code":"7384","rightsMonth":"3月","longTermRequired":true,"price":"1,721","dividendYield":"2.91%","benefitScore":"6","crossScore":"9","benefit":"青森県特産品カタログギフト","generalCredit":"○","institutionalCredit":"○"},{"name":"早稲田アカデミー","code":"4718","rightsMonth":"3月・9月","longTermRequired":true,"price":"2,877","dividendYield":"1.76%","benefitScore":"8","crossScore":"10","benefit":"クオカード・グループ利用券","generalCredit":"○","institutionalCredit":"○"},{"name":"ヒロセ通商","code":"7185","rightsMonth":"9月","longTermRequired":false,"price":"4,105","dividendYield":"0.00%","benefitScore":"9","crossScore":"対象外","benefit":"食品詰め合わせ","generalCredit":"×","institutionalCredit":"×"},{"name":"アシックス","code":"7936","rightsMonth":"6月・12月","longTermRequired":true,"price":"4,196","dividendYield":"0.67%","benefitScore":"7","crossScore":"10","benefit":"アシックス、オニツカタイガーの買物券","generalCredit":"○","institutionalCredit":"○"},{"name":"ラウンドワン","code":"4680","rightsMonth":"3月・6月・9月・12月","longTermRequired":false,"price":"1,305","dividendYield":"1.32%","benefitScore":"6","crossScore":"6","benefit":"割引券など","generalCredit":"○","institutionalCredit":"○"},{"name":"片倉工業","code":"3001","rightsMonth":"12月","longTermRequired":true,"price":"2,867","dividendYield":"1.76%","benefitScore":"6","crossScore":"7","benefit":"買物券、はちみつ、肌着","generalCredit":"○","institutionalCredit":"○"},{"name":"ＫＯＺＯホールディングス","code":"9973","rightsMonth":"12月","longTermRequired":false,"price":"26","dividendYield":"0.00%","benefitScore":"8","crossScore":"対象外","benefit":"食事券","generalCredit":"×","institutionalCredit":"×"},{"name":"GMOフィナンシャル","code":"7177","rightsMonth":"6月・12月","longTermRequired":true,"price":"991","dividendYield":"0.00%","benefitScore":"3","crossScore":"3","benefit":"GMO手数料キャッシュバック","generalCredit":"○","institutionalCredit":"○"},{"name":"SFP HD","code":"3198","rightsMonth":"2月・8月","longTermRequired":false,"price":"2,189","dividendYield":"1.28%","benefitScore":"8","crossScore":"10","benefit":"磯丸水産などの食事券","generalCredit":"○","institutionalCredit":"×"},{"name":"RIZAP","code":"2928","rightsMonth":"3月","longTermRequired":false,"price":"205","dividendYield":"0.00%","benefitScore":"7","crossScore":"対象外","benefit":"chocoZAPクーポン、グループポイント","generalCredit":"×","institutionalCredit":"×"},{"name":"焼肉坂井ホールディングス","code":"2694","rightsMonth":"3月・9月","longTermRequired":true,"price":"74","dividendYield":"0.00%","benefitScore":"2","crossScore":"対象外","benefit":"食事券","generalCredit":"×","institutionalCredit":"×"},{"name":"近鉄百貨店","code":"8244","rightsMonth":"2月・8月","longTermRequired":false,"price":"1,990","dividendYield":"1.01%","benefitScore":"3","crossScore":"4","benefit":"割引カードなど","generalCredit":"○","institutionalCredit":"○"},{"name":"近鉄グループHD","code":"9041","rightsMonth":"3月・9月","longTermRequired":false,"price":"3,118","dividendYield":"1.94%","benefitScore":"6","crossScore":"9","benefit":"鉄道乗車券","generalCredit":"○","institutionalCredit":"○"},{"name":"モリト","code":"9837","rightsMonth":"なし","longTermRequired":false,"price":"1,551","dividendYield":"4.46%","benefitScore":"対象外","crossScore":"対象外","benefit":"2024年特別優待（クオカード）","generalCredit":"○","institutionalCredit":"○"},{"name":"ルネサンス","code":"2378","rightsMonth":"3月・9月","longTermRequired":false,"price":"1,201","dividendYield":"1.08%","benefitScore":"7","crossScore":"10","benefit":"スポーツジム利用券","generalCredit":"○","institutionalCredit":"○"},{"name":"エクセディ","code":"7278","rightsMonth":"9月","longTermRequired":true,"price":"5,520","dividendYield":"5.46%","benefitScore":"7","crossScore":"6","benefit":"Webカタログギフト","generalCredit":"○","institutionalCredit":"○"},{"name":"ワキタ","code":"8125","rightsMonth":"2月","longTermRequired":false,"price":"1,872","dividendYield":"5.36%","benefitScore":"6","crossScore":"7","benefit":"ホテル宿泊券","generalCredit":"○","institutionalCredit":"○"},{"name":"大黒屋HD","code":"6993","rightsMonth":"3月","longTermRequired":false,"price":"41","dividendYield":"0.00%","benefitScore":"9","crossScore":"9","benefit":"クオカード（隠れ優待）","generalCredit":"×","institutionalCredit":"○"},{"name":"ドトール","code":"3087","rightsMonth":"2月","longTermRequired":false,"price":"2,644","dividendYield":"2.04%","benefitScore":"7","crossScore":"7","benefit":"ドトールポイント","generalCredit":"○","institutionalCredit":"○"},{"name":"理研ビタミン","code":"4526","rightsMonth":"3月・9月","longTermRequired":true,"price":"2,980","dividendYield":"3.71%","benefitScore":"6","crossScore":"7","benefit":"食品詰め合わせ","generalCredit":"○","institutionalCredit":"○"},{"name":"千趣会","code":"8165","rightsMonth":"6月・12月","longTermRequired":true,"price":"245","dividendYield":"0.00%","benefitScore":"7","crossScore":"9","benefit":"ベルメゾンポイント","generalCredit":"○","institutionalCredit":"○"},{"name":"日本調剤","code":"3341","rightsMonth":"3月・9月","longTermRequired":false,"price":"3,920","dividendYield":"0.00%","benefitScore":"7","crossScore":"8","benefit":"買物券","generalCredit":"○","institutionalCredit":"○"},{"name":"イートアンドHD","code":"2882","rightsMonth":"2月・8月","longTermRequired":false,"price":"2,068","dividendYield":"0.73%","benefitScore":"6","crossScore":"8","benefit":"食事券、自社商品","generalCredit":"○","institutionalCredit":"○"},{"name":"ゼリア新薬工業","code":"4559","rightsMonth":"3月・9月","longTermRequired":true,"price":"2,098","dividendYield":"2.28%","benefitScore":"6","crossScore":"7","benefit":"ヘパリーゼなど","generalCredit":"○","institutionalCredit":"○"},{"name":"ソースネクスト","code":"4344","rightsMonth":"12月","longTermRequired":true,"price":"176","dividendYield":"0.00%","benefitScore":"6","crossScore":"9","benefit":"買物ポイント","generalCredit":"○","institutionalCredit":"○"},{"name":"積水ハウス","code":"1928","rightsMonth":"1月","longTermRequired":false,"price":"3,466","dividendYield":"4.15%","benefitScore":"5","crossScore":"7","benefit":"お米5kg","generalCredit":"○","institutionalCredit":"○"},{"name":"フランスベッドHD","code":"7840","rightsMonth":"3月","longTermRequired":true,"price":"1,294","dividendYield":"3.17%","benefitScore":"6","crossScore":"9","benefit":"タオル、自社商品、ポイント","generalCredit":"○","institutionalCredit":"○"},{"name":"高島屋","code":"8233","rightsMonth":"2月・8月","longTermRequired":false,"price":"1,435","dividendYield":"1.80%","benefitScore":"4","crossScore":"9","benefit":"株主カード（買物割引）","generalCredit":"○","institutionalCredit":"○"},{"name":"小林洋行","code":"8742","rightsMonth":"3月","longTermRequired":true,"price":"304","dividendYield":"0.00%","benefitScore":"6","crossScore":"8","benefit":"お米券","generalCredit":"×","institutionalCredit":"○"},{"name":"パソナグループ","code":"2168","rightsMonth":"5月","longTermRequired":false,"price":"2,144","dividendYield":"3.49%","benefitScore":"5","crossScore":"5","benefit":"商品、宿泊抽選、1株隠れ優待クーポン","generalCredit":"○","institutionalCredit":"○"},{"name":"アルペン","code":"3028","rightsMonth":"6月・12月","longTermRequired":false,"price":"2,361","dividendYield":"2.10%","benefitScore":"7","crossScore":"8","benefit":"アルペン買物券","generalCredit":"○","institutionalCredit":"○"},{"name":"正栄食品工業","code":"8079","rightsMonth":"4月・10月","longTermRequired":false,"price":"4,215","dividendYield":"1.42%","benefitScore":"6","crossScore":"9","benefit":"お菓子詰め合わせ","generalCredit":"○","institutionalCredit":"○"},{"name":"静岡ガス","code":"9543","rightsMonth":"12月","longTermRequired":true,"price":"1,151","dividendYield":"3.64%","benefitScore":"6","crossScore":"8","benefit":"プレミアム優待俱楽部","generalCredit":"○","institutionalCredit":"○"},{"name":"ぴあ","code":"4337","rightsMonth":"3月","longTermRequired":true,"price":"3,620","dividendYield":"0.27%","benefitScore":"7","crossScore":"9","benefit":"図書カード・シネマカード","generalCredit":"○","institutionalCredit":"○"},{"name":"八洲電機","code":"3153","rightsMonth":"9月","longTermRequired":true,"price":"2,369","dividendYield":"1.70%","benefitScore":"6","crossScore":"7","benefit":"ジェフグルメカード","generalCredit":"○","institutionalCredit":"×"},{"name":"物語コーポレーション","code":"3097","rightsMonth":"3月・9月","longTermRequired":false,"price":"4,305","dividendYield":"0.92%","benefitScore":"6","crossScore":"9","benefit":"焼肉きんぐ、丸源ラーメン食事券","generalCredit":"○","institutionalCredit":"○"},{"name":"JP ホールディングス","code":"2749","rightsMonth":"3月・9月","longTermRequired":true,"price":"632","dividendYield":"1.93%","benefitScore":"8","crossScore":"10","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"日本マクドナルド","code":"2702","rightsMonth":"6月・12月","longTermRequired":true,"price":"6,500","dividendYield":"0.87%","benefitScore":"7","crossScore":"10","benefit":"マクドナルド食事券","generalCredit":"○","institutionalCredit":"○"},{"name":"プロネクサス","code":"7893","rightsMonth":"3月","longTermRequired":true,"price":"1,138","dividendYield":"3.34%","benefitScore":"6","crossScore":"9","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"ユニオンツール","code":"6278","rightsMonth":"6月","longTermRequired":true,"price":"8,690","dividendYield":"1.49%","benefitScore":"7","crossScore":"9","benefit":"お米5kg","generalCredit":"○","institutionalCredit":"○"},{"name":"カワチ薬品","code":"2664","rightsMonth":"3月","longTermRequired":false,"price":"2,910","dividendYield":"2.77%","benefitScore":"7","crossScore":"9","benefit":"買物券、お米券","generalCredit":"○","institutionalCredit":"○"},{"name":"クリレス","code":"3387","rightsMonth":"2月・8月","longTermRequired":true,"price":"802","dividendYield":"0.56%","benefitScore":"9","crossScore":"9","benefit":"食事券","generalCredit":"○","institutionalCredit":"○"},{"name":"力の源ホールディングス","code":"3561","rightsMonth":"3月・9月","longTermRequired":true,"price":"1,568","dividendYield":"1.29%","benefitScore":"8","crossScore":"7","benefit":"一風堂食事券","generalCredit":"×","institutionalCredit":"○"},{"name":"ステップ","code":"9795","rightsMonth":"9月","longTermRequired":true,"price":"2,433","dividendYield":"3.37%","benefitScore":"5","crossScore":"7","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"森永製菓","code":"2201","rightsMonth":"9月","longTermRequired":true,"price":"2,715","dividendYield":"2.41%","benefitScore":"6","crossScore":"6","benefit":"お菓子詰め合わせ","generalCredit":"○","institutionalCredit":"○"},{"name":"J.フロント リテイリング","code":"3086","rightsMonth":"2月・8月","longTermRequired":true,"price":"2,485","dividendYield":"2.16%","benefitScore":"5","crossScore":"8","benefit":"買物割引","generalCredit":"○","institutionalCredit":"○"},{"name":"ビックカメラ","code":"3048","rightsMonth":"2月・8月","longTermRequired":true,"price":"1,694","dividendYield":"2.37%","benefitScore":"8","crossScore":"9","benefit":"ビックカメラ買物券","generalCredit":"○","institutionalCredit":"○"},{"name":"ポーラ・オルビスHD","code":"4927","rightsMonth":"12月","longTermRequired":true,"price":"1,311","dividendYield":"3.96%","benefitScore":"8","crossScore":"8","benefit":"化粧品","generalCredit":"○","institutionalCredit":"○"},{"name":"フジシールIN","code":"7864","rightsMonth":"3月","longTermRequired":true,"price":"2,891","dividendYield":"2.47%","benefitScore":"9","crossScore":"10","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"ヨロズ","code":"7294","rightsMonth":"3月","longTermRequired":true,"price":"958","dividendYield":"3.10%","benefitScore":"8","crossScore":"10","benefit":"クオカード、カタログギフト","generalCredit":"○","institutionalCredit":"○"},{"name":"イオン","code":"8267","rightsMonth":"2月・8月","longTermRequired":false,"price":"1,805","dividendYield":"0.76%","benefitScore":"5","crossScore":"7","benefit":"キャッシュバック、イオンラウンジ","generalCredit":"○","institutionalCredit":"○"},{"name":"NJS","code":"2325","rightsMonth":"6月・12月","longTermRequired":false,"price":"6,030","dividendYield":"1.67%","benefitScore":"6","crossScore":"8","benefit":"プレミアム優待クラブ","generalCredit":"○","institutionalCredit":"○"},{"name":"三谷産業","code":"8285","rightsMonth":"3月","longTermRequired":false,"price":"435","dividendYield":"2.31%","benefitScore":"6","crossScore":"7","benefit":"自社商品（食器など）","generalCredit":"○","institutionalCredit":"○"},{"name":"モロゾフ","code":"2217","rightsMonth":"7月","longTermRequired":true,"price":"1,590","dividendYield":"0.88%","benefitScore":"6","crossScore":"8","benefit":"チョコレート、洋菓子","generalCredit":"○","institutionalCredit":"○"},{"name":"ユナイテッド＆コレクティブ","code":"3557","rightsMonth":"2月・8月","longTermRequired":false,"price":"942","dividendYield":"0.00%","benefitScore":"6","crossScore":"対象外","benefit":"食事券","generalCredit":"×","institutionalCredit":"×"},{"name":"AOKIホールディングス","code":"8214","rightsMonth":"3月・9月","longTermRequired":false,"price":"1,860","dividendYield":"4.36%","benefitScore":"6","crossScore":"8","benefit":"AOKI、快活クラブ割引券","generalCredit":"○","institutionalCredit":"○"},{"name":"大塚ホールディングス","code":"4578","rightsMonth":"12月","longTermRequired":false,"price":"8,553","dividendYield":"1.65%","benefitScore":"6","crossScore":"7","benefit":"自社商品（食品）詰め合わせ","generalCredit":"○","institutionalCredit":"○"},{"name":"ペッパーフードサービス","code":"3053","rightsMonth":"6月・12月","longTermRequired":false,"price":"187","dividendYield":"0.00%","benefitScore":"7","crossScore":"対象外","benefit":"食事券・自社商品","generalCredit":"○","institutionalCredit":"×"},{"name":"ヒーハイスト","code":"6433","rightsMonth":"3月","longTermRequired":false,"price":"472","dividendYield":"0.42%","benefitScore":"7","crossScore":"対象外","benefit":"クオカード","generalCredit":"×","institutionalCredit":"×"},{"name":"GFA","code":"8783","rightsMonth":"3月","longTermRequired":true,"price":"423","dividendYield":"0.00%","benefitScore":"5","crossScore":"対象外","benefit":"食事、宿泊ポイント","generalCredit":"×","institutionalCredit":"×"},{"name":"中央倉庫","code":"9319","rightsMonth":"3月","longTermRequired":false,"price":"1,445","dividendYield":"2.61%","benefitScore":"3","crossScore":"4","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"トヨタ自動車","code":"7203","rightsMonth":"3月","longTermRequired":true,"price":"2,898","dividendYield":"3.29%","benefitScore":"5","crossScore":"8","benefit":"TOYOTA Wallet","generalCredit":"○","institutionalCredit":"○"},{"name":"ラクト・ジャパン","code":"3139","rightsMonth":"11月","longTermRequired":true,"price":"4,230","dividendYield":"3.15%","benefitScore":"8","crossScore":"8","benefit":"クオカード、カタログギフト","generalCredit":"○","institutionalCredit":"○"},{"name":"ダイトウボウ","code":"3202","rightsMonth":"3月","longTermRequired":true,"price":"110","dividendYield":"2.73%","benefitScore":"7","crossScore":"対象外","benefit":"クオカード・ECサイト割引券","generalCredit":"×","institutionalCredit":"×"},{"name":"GENDA","code":"9166","rightsMonth":"1月・7月","longTermRequired":true,"price":"719","dividendYield":"0.00%","benefitScore":"6","crossScore":"対象外","benefit":"カラオケ、ゲームセンター、食事券","generalCredit":"×","institutionalCredit":"×"},{"name":"SHOEI","code":"7839","rightsMonth":"9月","longTermRequired":false,"price":"1,851","dividendYield":"3.20%","benefitScore":"7","crossScore":"8","benefit":"ノベルティグッズ・買物券","generalCredit":"○","institutionalCredit":"○"},{"name":"メニコン","code":"7780","rightsMonth":"3月","longTermRequired":true,"price":"1,183","dividendYield":"2.35%","benefitScore":"6","crossScore":"9","benefit":"買物券、コンタクト、食品","generalCredit":"○","institutionalCredit":"○"},{"name":"カナミックネットワーク","code":"3939","rightsMonth":"9月","longTermRequired":true,"price":"503","dividendYield":"1.48%","benefitScore":"2","crossScore":"2","benefit":"スポーツジム利用券","generalCredit":"○","institutionalCredit":"○"},{"name":"中広","code":"2139","rightsMonth":"3月","longTermRequired":true,"price":"452","dividendYield":"2.70%","benefitScore":"7","crossScore":"8","benefit":"クオカード","generalCredit":"×","institutionalCredit":"○"},{"name":"すかいらーく","code":"3197","rightsMonth":"6月・12月","longTermRequired":false,"price":"3,029","dividendYield":"0.66%","benefitScore":"8","crossScore":"10","benefit":"ガスト、バーミヤンなどの食事券","generalCredit":"○","institutionalCredit":"○"},{"name":"マツキヨココカラ","code":"3088","rightsMonth":"3月・9月","longTermRequired":false,"price":"3,120","dividendYield":"1.48%","benefitScore":"7","crossScore":"8","benefit":"買物ポイント","generalCredit":"○","institutionalCredit":"○"},{"name":"メディカル・データ","code":"3902","rightsMonth":"なし","longTermRequired":false,"price":"569","dividendYield":"1.54%","benefitScore":"対象外","crossScore":"対象外","benefit":"2024年特別優待（電子ギフト）","generalCredit":"×","institutionalCredit":"×"},{"name":"ロック・フィールド","code":"2910","rightsMonth":"4月・10月","longTermRequired":true,"price":"1,508","dividendYield":"1.59%","benefitScore":"7","crossScore":"7","benefit":"食事券（テイクアウト）","generalCredit":"○","institutionalCredit":"○"},{"name":"バリューHR","code":"6078","rightsMonth":"12月","longTermRequired":true,"price":"1,555","dividendYield":"1.66%","benefitScore":"9","crossScore":"10","benefit":"商品交換ポイント（dポイント）","generalCredit":"○","institutionalCredit":"○"},{"name":"日本製紙","code":"3863","rightsMonth":"3月","longTermRequired":false,"price":"1,252","dividendYield":"1.20%","benefitScore":"6","crossScore":"8","benefit":"トイレットペーパー、ティッシュなど詰め合わせ","generalCredit":"○","institutionalCredit":"○"},{"name":"グルメ杵屋","code":"9850","rightsMonth":"3月・9月","longTermRequired":false,"price":"1,019","dividendYield":"0.69%","benefitScore":"6","crossScore":"8","benefit":"食事券","generalCredit":"○","institutionalCredit":"○"},{"name":"メディア工房","code":"3815","rightsMonth":"8月","longTermRequired":true,"price":"505","dividendYield":"0.00%","benefitScore":"6","crossScore":"対象外","benefit":"QUOカードPay","generalCredit":"×","institutionalCredit":"×"},{"name":"シード","code":"7743","rightsMonth":"3月","longTermRequired":true,"price":"549","dividendYield":"2.73%","benefitScore":"7","crossScore":"9","benefit":"クオカード・コンタクトレンズ","generalCredit":"×","institutionalCredit":"○"},{"name":"クリエイトＳＤ","code":"3148","rightsMonth":"5月","longTermRequired":false,"price":"3,385","dividendYield":"2.66%","benefitScore":"7","crossScore":"8","benefit":"買物券（ドラッグストア）","generalCredit":"○","institutionalCredit":"○"},{"name":"スギホールディングス","code":"7649","rightsMonth":"2月","longTermRequired":false,"price":"3,888","dividendYield":"0.90%","benefitScore":"7","crossScore":"8","benefit":"買物券","generalCredit":"○","institutionalCredit":"○"},{"name":"三菱ロジスネクスト","code":"7105","rightsMonth":"3月","longTermRequired":true,"price":"1,800","dividendYield":"1.33%","benefitScore":"6","crossScore":"7","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"ダイドーグループHD","code":"2590","rightsMonth":"1月","longTermRequired":true,"price":"2,564","dividendYield":"1.17%","benefitScore":"7","crossScore":"9","benefit":"ドリング・ゼリー詰め合わせ","generalCredit":"○","institutionalCredit":"○"},{"name":"パレモ・ホールディングス","code":"2778","rightsMonth":"2月","longTermRequired":true,"price":"145","dividendYield":"0.00%","benefitScore":"7","crossScore":"7","benefit":"買物券","generalCredit":"×","institutionalCredit":"○"},{"name":"ラオックス","code":"8202","rightsMonth":"12月","longTermRequired":false,"price":"156","dividendYield":"1.91%","benefitScore":"7","crossScore":"7","benefit":"カタログギフト","generalCredit":"×","institutionalCredit":"○"},{"name":"TOKAI HD","code":"3167","rightsMonth":"3月・9月","longTermRequired":false,"price":"1,069","dividendYield":"3.20%","benefitScore":"6","crossScore":"7","benefit":"クオカード、水、格安スマホ、食事券","generalCredit":"○","institutionalCredit":"○"},{"name":"不二家","code":"2211","rightsMonth":"12月","longTermRequired":false,"price":"2,588","dividendYield":"1.16%","benefitScore":"9","crossScore":"8","benefit":"食事券","generalCredit":"○","institutionalCredit":"○"},{"name":"システムリサーチ","code":"3771","rightsMonth":"9月","longTermRequired":false,"price":"2,210","dividendYield":"2.74%","benefitScore":"6","crossScore":"7","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"テーオーシー","code":"8841","rightsMonth":"3月","longTermRequired":false,"price":"825","dividendYield":"1.19%","benefitScore":"5","crossScore":"8","benefit":"温泉入場券、化粧品、健康食品","generalCredit":"○","institutionalCredit":"○"},{"name":"ミツバ","code":"7280","rightsMonth":"3月","longTermRequired":false,"price":"985","dividendYield":"1.52%","benefitScore":"6","crossScore":"7","benefit":"群馬県産商品","generalCredit":"○","institutionalCredit":"○"},{"name":"ニッケ","code":"3201","rightsMonth":"5月","longTermRequired":true,"price":"1,654","dividendYield":"2.55%","benefitScore":"5","crossScore":"7","benefit":"クオカード、カタログギフト","generalCredit":"○","institutionalCredit":"○"},{"name":"かんなん丸","code":"7585","rightsMonth":"6月・12月","longTermRequired":false,"price":"409","dividendYield":"0.00%","benefitScore":"5","crossScore":"対象外","benefit":"食事券、ジェフグルメカード","generalCredit":"×","institutionalCredit":"×"},{"name":"SANKO MARKETING","code":"2762","rightsMonth":"6月・12月","longTermRequired":false,"price":"97","dividendYield":"0.00%","benefitScore":"4","crossScore":"対象外","benefit":"レトルトカレーなど","generalCredit":"×","institutionalCredit":"×"},{"name":"リンガーハット","code":"8200","rightsMonth":"2月・8月","longTermRequired":true,"price":"2,311","dividendYield":"0.52%","benefitScore":"7","crossScore":"8","benefit":"食事券","generalCredit":"○","institutionalCredit":"○"},{"name":"アルビス","code":"7475","rightsMonth":"3月・9月","longTermRequired":true,"price":"3,150","dividendYield":"2.28%","benefitScore":"7","crossScore":"8","benefit":"自社商品（食品）、お米など","generalCredit":"○","institutionalCredit":"○"},{"name":"エフ・シー・シー","code":"7296","rightsMonth":"3月・9月","longTermRequired":true,"price":"3,210","dividendYield":"3.88%","benefitScore":"7","crossScore":"7","benefit":"みかん、お茶","generalCredit":"○","institutionalCredit":"○"},{"name":"ルックホールディングス","code":"8029","rightsMonth":"12月","longTermRequired":true,"price":"2,671","dividendYield":"3.81%","benefitScore":"7","crossScore":"8","benefit":"買物券、アパレル品、小物","generalCredit":"○","institutionalCredit":"○"},{"name":"シンシア","code":"7782","rightsMonth":"12月","longTermRequired":true,"price":"603","dividendYield":"2.21%","benefitScore":"6","crossScore":"8","benefit":"クオカード、コンタクト割引券","generalCredit":"×","institutionalCredit":"○"},{"name":"fantasista","code":"1783","rightsMonth":"9月","longTermRequired":false,"price":"61","dividendYield":"0.00%","benefitScore":"3","crossScore":"対象外","benefit":"クオカード、サプリメント割引権利","generalCredit":"×","institutionalCredit":"×"},{"name":"安田倉庫","code":"9324","rightsMonth":"3月","longTermRequired":true,"price":"2,112","dividendYield":"2.76%","benefitScore":"4","crossScore":"6","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"ディップ","code":"2379","rightsMonth":"2月・8月","longTermRequired":false,"price":"2,358","dividendYield":"4.04%","benefitScore":"6","crossScore":"7","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"明光ネット","code":"4668","rightsMonth":"8月","longTermRequired":true,"price":"741","dividendYield":"3.49%","benefitScore":"7","crossScore":"9","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"ＲＹＯＤＥＮ","code":"8084","rightsMonth":"3月","longTermRequired":true,"price":"3,190","dividendYield":"4.27%","benefitScore":"6","crossScore":"8","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"ハニーズHD","code":"2792","rightsMonth":"5月","longTermRequired":true,"price":"1,561","dividendYield":"3.52%","benefitScore":"6","crossScore":"8","benefit":"洋服買物券","generalCredit":"○","institutionalCredit":"○"},{"name":"コメダHD","code":"3543","rightsMonth":"2月・8月","longTermRequired":true,"price":"3,060","dividendYield":"1.95%","benefitScore":"7","crossScore":"7","benefit":"食事券（電子）","generalCredit":"○","institutionalCredit":"○"},{"name":"シュッピン","code":"3179","rightsMonth":"3月","longTermRequired":true,"price":"1,260","dividendYield":"3.74%","benefitScore":"6","crossScore":"9","benefit":"自転車部品、カメラ、腕時計、万年筆などの買物券","generalCredit":"○","institutionalCredit":"○"},{"name":"ビューティガレージ","code":"3180","rightsMonth":"4月","longTermRequired":true,"price":"1,539","dividendYield":"1.05%","benefitScore":"6","crossScore":"8","benefit":"化粧品、タオルなど4,000円相当","generalCredit":"○","institutionalCredit":"○"},{"name":"ジンズ","code":"3046","rightsMonth":"8月","longTermRequired":false,"price":"10,270","dividendYield":"0.92%","benefitScore":"5","crossScore":"10","benefit":"割引券","generalCredit":"○","institutionalCredit":"○"},{"name":"福田組","code":"1899","rightsMonth":"12月","longTermRequired":true,"price":"6,510","dividendYield":"2.99%","benefitScore":"7","crossScore":"9","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"ウェザーニューズ","code":"4825","rightsMonth":"5月・11月","longTermRequired":false,"price":"4,775","dividendYield":"1.90%","benefitScore":"5","crossScore":"7","benefit":"ウェザーニュース Pro6か月間無料","generalCredit":"○","institutionalCredit":"○"},{"name":"DCMホールディングス","code":"3050","rightsMonth":"2月","longTermRequired":true,"price":"1,535","dividendYield":"3.00%","benefitScore":"7","crossScore":"9","benefit":"買物券（ホームセンター）","generalCredit":"○","institutionalCredit":"○"},{"name":"ギフトHD","code":"9279","rightsMonth":"4月・10月","longTermRequired":true,"price":"3,125","dividendYield":"0.70%","benefitScore":"7","crossScore":"8","benefit":"ラーメン無料チケット","generalCredit":"○","institutionalCredit":"○"},{"name":"松屋フーズHD","code":"9887","rightsMonth":"3月","longTermRequired":true,"price":"6,390","dividendYield":"0.38%","benefitScore":"5","crossScore":"8","benefit":"松屋などの食事券","generalCredit":"○","institutionalCredit":"○"},{"name":"ホットランドHD","code":"3196","rightsMonth":"6月・12月","longTermRequired":false,"price":"2,047","dividendYield":"0.63%","benefitScore":"7","crossScore":"8","benefit":"銀だこ食事券","generalCredit":"○","institutionalCredit":"○"},{"name":"ゼビオホールディングス","code":"8281","rightsMonth":"3月・9月","longTermRequired":false,"price":"1,177","dividendYield":"3.00%","benefitScore":"6","crossScore":"7","benefit":"買物券（スポーツ用品）","generalCredit":"○","institutionalCredit":"○"},{"name":"サガミホールディングス","code":"9900","rightsMonth":"3月・9月","longTermRequired":false,"price":"1,869","dividendYield":"0.54%","benefitScore":"6","crossScore":"8","benefit":"食事券","generalCredit":"○","institutionalCredit":"○"},{"name":"イオンファンタジー","code":"4343","rightsMonth":"2月・8月","longTermRequired":false,"price":"3,750","dividendYield":"0.40%","benefitScore":"6","crossScore":"8","benefit":"割引券・お米・ジュース","generalCredit":"○","institutionalCredit":"○"},{"name":"はるやまHD","code":"7416","rightsMonth":"3月","longTermRequired":true,"price":"783","dividendYield":"2.01%","benefitScore":"7","crossScore":"7","benefit":"ネクタイ、シャツ、ブラウスなど贈呈券","generalCredit":"×","institutionalCredit":"○"},{"name":"マックハウス","code":"7603","rightsMonth":"2月・8月","longTermRequired":true,"price":"342","dividendYield":"0.00%","benefitScore":"6","crossScore":"6","benefit":"洋服買物券","generalCredit":"×","institutionalCredit":"○"},{"name":"ストレージ王","code":"2997","rightsMonth":"1月","longTermRequired":true,"price":"965","dividendYield":"0.00%","benefitScore":"6","crossScore":"対象外","benefit":"クオカード、自社トランクルーム割引券","generalCredit":"×","institutionalCredit":"×"},{"name":"TOKYO BASE","code":"3415","rightsMonth":"1月","longTermRequired":true,"price":"529","dividendYield":"1.08%","benefitScore":"4","crossScore":"6","benefit":"アパレル買物券","generalCredit":"○","institutionalCredit":"○"},{"name":"ユキグニファクトリー","code":"1375","rightsMonth":"3月","longTermRequired":true,"price":"1,076","dividendYield":"1.49%","benefitScore":"7","crossScore":"8","benefit":"きのこ詰め合わせ","generalCredit":"○","institutionalCredit":"×"},{"name":"第一興商","code":"7458","rightsMonth":"3月・9月","longTermRequired":false,"price":"1,725","dividendYield":"3.86%","benefitScore":"8","crossScore":"9","benefit":"食事券、カラオケ券","generalCredit":"○","institutionalCredit":"○"},{"name":"ベルーナ","code":"9997","rightsMonth":"3月・9月","longTermRequired":false,"price":"1,049","dividendYield":"2.88%","benefitScore":"6","crossScore":"7","benefit":"ベルーナ割引券・お酒","generalCredit":"○","institutionalCredit":"○"},{"name":"プロパスト","code":"3236","rightsMonth":"5月","longTermRequired":false,"price":"244","dividendYield":"2.46%","benefitScore":"対象外","crossScore":"対象外","benefit":"クオカード（隠れ優待）","generalCredit":"×","institutionalCredit":"×"},{"name":"パンパフィフィック","code":"7532","rightsMonth":"6月・12月","longTermRequired":false,"price":"5,239","dividendYield":"0.81%","benefitScore":"8","crossScore":"10","benefit":"ドン・キホーテ買物ポイント","generalCredit":"○","institutionalCredit":"○"},{"name":"エディオン","code":"2730","rightsMonth":"3月","longTermRequired":true,"price":"2,152","dividendYield":"2.17%","benefitScore":"9","crossScore":"10","benefit":"買物券（家電、日用品、食品など）","generalCredit":"○","institutionalCredit":"○"},{"name":"萩原工業","code":"7856","rightsMonth":"10月","longTermRequired":true,"price":"1,685","dividendYield":"3.83%","benefitScore":"7","crossScore":"6","benefit":"クオカード含むカタログギフト","generalCredit":"○","institutionalCredit":"○"},{"name":"小林製薬","code":"4967","rightsMonth":"6月・12月","longTermRequired":false,"price":"5,459","dividendYield":"1.89%","benefitScore":"7","crossScore":"7","benefit":"自社商品詰め合わせなど","generalCredit":"○","institutionalCredit":"○"},{"name":"養命酒製造","code":"2540","rightsMonth":"9月","longTermRequired":true,"price":"4,005","dividendYield":"1.15%","benefitScore":"6","crossScore":"7","benefit":"食品詰め合わせ（のど飴、スープ、甘酒など）","generalCredit":"○","institutionalCredit":"○"},{"name":"大王製紙","code":"3880","rightsMonth":"3月","longTermRequired":true,"price":"890","dividendYield":"1.56%","benefitScore":"6","crossScore":"6","benefit":"ティッシュなど詰め合わせ","generalCredit":"○","institutionalCredit":"○"},{"name":"ノバレーゼ","code":"9160","rightsMonth":"12月","longTermRequired":true,"price":"332","dividendYield":"0.00%","benefitScore":"5","crossScore":"対象外","benefit":"食品ギフト、食事券","generalCredit":"×","institutionalCredit":"×"},{"name":"アトラグループ","code":"6029","rightsMonth":"12月","longTermRequired":false,"price":"202","dividendYield":"0.00%","benefitScore":"5","crossScore":"対象外","benefit":"健康食品","generalCredit":"×","institutionalCredit":"×"},{"name":"ライドオンエクスプレス","code":"6082","rightsMonth":"3月","longTermRequired":false,"price":"1,011","dividendYield":"1.49%","benefitScore":"5","crossScore":"8","benefit":"「銀のさら」「釜寅」の食事券、お米","generalCredit":"○","institutionalCredit":"×"},{"name":"コロワイド","code":"7616","rightsMonth":"3月・9月","longTermRequired":false,"price":"1,916","dividendYield":"0.26%","benefitScore":"7","crossScore":"10","benefit":"カッパ寿司、ラパウザなどの食事ポイント","generalCredit":"○","institutionalCredit":"○"},{"name":"名糖産業","code":"2207","rightsMonth":"3月・9月","longTermRequired":false,"price":"2,285","dividendYield":"1.74%","benefitScore":"7","crossScore":"7","benefit":"お菓子詰め合わせ","generalCredit":"○","institutionalCredit":"○"},{"name":"サーラコーポレーション","code":"2734","rightsMonth":"11月","longTermRequired":false,"price":"1,041","dividendYield":"3.10%","benefitScore":"6","crossScore":"7","benefit":"カタログギフト","generalCredit":"○","institutionalCredit":"○"},{"name":"西松屋チェーン","code":"7545","rightsMonth":"2月・8月","longTermRequired":true,"price":"2,213","dividendYield":"1.41%","benefitScore":"7","crossScore":"8","benefit":"買物券","generalCredit":"○","institutionalCredit":"○"},{"name":"コックス","code":"9876","rightsMonth":"2月","longTermRequired":false,"price":"240","dividendYield":"0.00%","benefitScore":"2","crossScore":"対象外","benefit":"買物券（アパレル）","generalCredit":"×","institutionalCredit":"×"},{"name":"極楽湯HD","code":"2340","rightsMonth":"9月","longTermRequired":true,"price":"503","dividendYield":"0.00%","benefitScore":"7","crossScore":"対象外","benefit":"温泉、岩盤浴チケット","generalCredit":"×","institutionalCredit":"×"},{"name":"ジェイグループHD","code":"3063","rightsMonth":"2月・8月","longTermRequired":false,"price":"784","dividendYield":"0.52%","benefitScore":"7","crossScore":"5","benefit":"食事券","generalCredit":"×","institutionalCredit":"○"},{"name":"サンエー","code":"2659","rightsMonth":"2月","longTermRequired":false,"price":"2,847","dividendYield":"3.53%","benefitScore":"7","crossScore":"8","benefit":"ギフトカード","generalCredit":"○","institutionalCredit":"○"},{"name":"gumi","code":"3903","rightsMonth":"4月","longTermRequired":false,"price":"609","dividendYield":"0.00%","benefitScore":"5","crossScore":"6","benefit":"ビットコインの抽選権利","generalCredit":"×","institutionalCredit":"○"},{"name":"ＪＳＰ","code":"7942","rightsMonth":"3月","longTermRequired":true,"price":"1,968","dividendYield":"4.07%","benefitScore":"8","crossScore":"9","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"ビジョン","code":"9416","rightsMonth":"6月・12月","longTermRequired":false,"price":"1,232","dividendYield":"3.64%","benefitScore":"3","crossScore":"5","benefit":"Wi-Fi割引、化粧品、ホテル宿泊割引","generalCredit":"○","institutionalCredit":"○"},{"name":"大成ラミック","code":"4994","rightsMonth":"3月","longTermRequired":true,"price":"2,611","dividendYield":"2.67%","benefitScore":"7","crossScore":"9","benefit":"食品詰め合わせ","generalCredit":"○","institutionalCredit":"○"},{"name":"コラントッテ","code":"7792","rightsMonth":"9月","longTermRequired":true,"price":"1,576","dividendYield":"2.71%","benefitScore":"7","crossScore":"対象外","benefit":"買物ポイント、自社商品","generalCredit":"×","institutionalCredit":"×"},{"name":"ウエルシアHD","code":"3141","rightsMonth":"2月","longTermRequired":false,"price":"2,879","dividendYield":"0.00%","benefitScore":"8","crossScore":"10","benefit":"WAON POINT、カタログギフト","generalCredit":"○","institutionalCredit":"○"},{"name":"セレス","code":"3696","rightsMonth":"12月","longTermRequired":false,"price":"2,444","dividendYield":"2.46%","benefitScore":"8","crossScore":"9","benefit":"仮想通貨","generalCredit":"○","institutionalCredit":"○"},{"name":"ジョイフル本田","code":"3191","rightsMonth":"6月","longTermRequired":true,"price":"2,214","dividendYield":"3.83%","benefitScore":"7","crossScore":"9","benefit":"買物券、カタログギフト","generalCredit":"○","institutionalCredit":"○"},{"name":"イトーキ","code":"7972","rightsMonth":"5月","longTermRequired":false,"price":"2,447","dividendYield":"2.66%","benefitScore":"5","crossScore":"5","benefit":"自社商品詰め合わせ、自社サイト割引券","generalCredit":"○","institutionalCredit":"○"},{"name":"橋本総業HD","code":"7570","rightsMonth":"3月","longTermRequired":false,"price":"1,298","dividendYield":"3.85%","benefitScore":"6","crossScore":"7","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"USMH","code":"3222","rightsMonth":"2月・8月","longTermRequired":true,"price":"979","dividendYield":"1.63%","benefitScore":"6","crossScore":"8","benefit":"お米、ラーメン、カレーなどから選択","generalCredit":"○","institutionalCredit":"○"},{"name":"カッパ・クリエイト","code":"7421","rightsMonth":"3月・9月","longTermRequired":false,"price":"1,648","dividendYield":"0.00%","benefitScore":"9","crossScore":"9","benefit":"食事券","generalCredit":"○","institutionalCredit":"○"},{"name":"伊藤園","code":"2593","rightsMonth":"4月","longTermRequired":false,"price":"3,569","dividendYield":"1.37%","benefitScore":"6","crossScore":"7","benefit":"お茶、コーヒーなど詰め合わせ","generalCredit":"○","institutionalCredit":"○"},{"name":"リテールパートナーズ","code":"8167","rightsMonth":"2月・8月","longTermRequired":false,"price":"1,441","dividendYield":"2.81%","benefitScore":"7","crossScore":"8","benefit":"ギフトカード","generalCredit":"○","institutionalCredit":"○"},{"name":"稲葉製作所","code":"3421","rightsMonth":"1月・7月","longTermRequired":false,"price":"1,705","dividendYield":"2.61%","benefitScore":"4","crossScore":"6","benefit":"図書カード・地域特産品","generalCredit":"○","institutionalCredit":"○"},{"name":"KPP HD","code":"9274","rightsMonth":"3月","longTermRequired":false,"price":"820","dividendYield":"4.40%","benefitScore":"7","crossScore":"9","benefit":"図書カード","generalCredit":"○","institutionalCredit":"○"},{"name":"ケーズHD","code":"8282","rightsMonth":"3月・9月","longTermRequired":true,"price":"1,618","dividendYield":"2.76%","benefitScore":"8","crossScore":"9","benefit":"買物券","generalCredit":"○","institutionalCredit":"○"},{"name":"三重交通GHD","code":"3232","rightsMonth":"3月・9月","longTermRequired":true,"price":"547","dividendYield":"2.94%","benefitScore":"6","crossScore":"9","benefit":"バス乗車券など","generalCredit":"○","institutionalCredit":"○"},{"name":"日本空調サービス","code":"4658","rightsMonth":"なし","longTermRequired":false,"price":"1,338","dividendYield":"3.51%","benefitScore":"***","crossScore":"***","benefit":"2024年特別優待（クオカード）","generalCredit":"○","institutionalCredit":"○"},{"name":"カゴメ","code":"2811","rightsMonth":"6月","longTermRequired":true,"price":"2,991","dividendYield":"1.63%","benefitScore":"6","crossScore":"6","benefit":"食料品詰め合わせ","generalCredit":"○","institutionalCredit":"○"},{"name":"象印マホービン","code":"7965","rightsMonth":"11月","longTermRequired":false,"price":"1,662","dividendYield":"3.85%","benefitScore":"3","crossScore":"4","benefit":"家電の優待特別割引","generalCredit":"○","institutionalCredit":"○"},{"name":"綿半 HD","code":"3199","rightsMonth":"9月","longTermRequired":true,"price":"1,619","dividendYield":"1.85%","benefitScore":"6","crossScore":"7","benefit":"カタログギフト","generalCredit":"○","institutionalCredit":"○"},{"name":"アルコニックス","code":"3036","rightsMonth":"3月","longTermRequired":true,"price":"2,145","dividendYield":"3.92%","benefitScore":"7","crossScore":"7","benefit":"カタログギフト","generalCredit":"○","institutionalCredit":"○"},{"name":"OATアグリオ","code":"4979","rightsMonth":"12月","longTermRequired":true,"price":"2,470","dividendYield":"2.42%","benefitScore":"8","crossScore":"9","benefit":"クオカード、ジュース、フラワーギフト券","generalCredit":"○","institutionalCredit":"×"},{"name":"サカタインクス","code":"4633","rightsMonth":"12月","longTermRequired":true,"price":"2,291","dividendYield":"3.92%","benefitScore":"8","crossScore":"10","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"ヤマダホールディングス","code":"9831","rightsMonth":"3月・9月","longTermRequired":false,"price":"495","dividendYield":"3.44%","benefitScore":"6","crossScore":"8","benefit":"買物券","generalCredit":"○","institutionalCredit":"○"},{"name":"モブキャストHD","code":"3664","rightsMonth":"12月","longTermRequired":false,"price":"52","dividendYield":"0.00%","benefitScore":"10","crossScore":"10","benefit":"電子ギフト（隠れ優待）","generalCredit":"×","institutionalCredit":"○"},{"name":"サカタのタネ","code":"1377","rightsMonth":"5月","longTermRequired":true,"price":"3,665","dividendYield":"2.05%","benefitScore":"7","crossScore":"8","benefit":"食品、球根などのカタログギフト","generalCredit":"○","institutionalCredit":"○"},{"name":"パピレス","code":"3641","rightsMonth":"3月","longTermRequired":false,"price":"884","dividendYield":"1.14%","benefitScore":"7","crossScore":"対象外","benefit":"「Renta!」の10,000ポイント","generalCredit":"×","institutionalCredit":"×"},{"name":"ストリーム","code":"3071","rightsMonth":"1月","longTermRequired":true,"price":"114","dividendYield":"2.63%","benefitScore":"8","crossScore":"8","benefit":"自社サイトポイント","generalCredit":"×","institutionalCredit":"×"},{"name":"シークス","code":"7613","rightsMonth":"12月","longTermRequired":false,"price":"1,380","dividendYield":"3.48%","benefitScore":"8","crossScore":"8","benefit":"ギフトカード","generalCredit":"○","institutionalCredit":"○"},{"name":"H2O リテイリング","code":"8242","rightsMonth":"3月・9月","longTermRequired":false,"price":"2,240","dividendYield":"1.96%","benefitScore":"5","crossScore":"6","benefit":"お米、買物割引券","generalCredit":"○","institutionalCredit":"○"},{"name":"カーリット","code":"4275","rightsMonth":"3月","longTermRequired":true,"price":"1,360","dividendYield":"2.62%","benefitScore":"6","crossScore":"7","benefit":"ギフトカード","generalCredit":"○","institutionalCredit":"○"},{"name":"メディアスHD","code":"3154","rightsMonth":"6月","longTermRequired":false,"price":"842","dividendYield":"2.34%","benefitScore":"5","crossScore":"9","benefit":"クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"ティーケーピー(TKP)","code":"3479","rightsMonth":"2月","longTermRequired":false,"price":"2,060","dividendYield":"0.00%","benefitScore":"5","crossScore":"7","benefit":"食事券、ホテル宿泊券","generalCredit":"×","institutionalCredit":"○"},{"name":"シモジマ","code":"7482","rightsMonth":"3月","longTermRequired":false,"price":"1,306","dividendYield":"4.15%","benefitScore":"7","crossScore":"8","benefit":"クオカード、事務用品など詰め合わせ","generalCredit":"○","institutionalCredit":"○"},{"name":"オークネット","code":"3964","rightsMonth":"12月","longTermRequired":false,"price":"1,897","dividendYield":"2.37%","benefitScore":"5","crossScore":"6","benefit":"プレミアム優待俱楽部ポイント","generalCredit":"○","institutionalCredit":"○"},{"name":"オエノン","code":"2533","rightsMonth":"12月","longTermRequired":true,"price":"590","dividendYield":"1.70%","benefitScore":"6","crossScore":"7","benefit":"お酒","generalCredit":"○","institutionalCredit":"○"},{"name":"サカイ引越センター","code":"9039","rightsMonth":"3月・9月","longTermRequired":false,"price":"2,999","dividendYield":"3.28%","benefitScore":"6","crossScore":"6","benefit":"お米5kg、クオカード","generalCredit":"○","institutionalCredit":"○"},{"name":"PR TIMES","code":"3922","rightsMonth":"2月","longTermRequired":true,"price":"2,864","dividendYield":"0.47%","benefitScore":"7","crossScore":"10","benefit":"商品券や食事券含むカタログ","generalCredit":"○","institutionalCredit":"○"},{"name":"アレンザ","code":"3546","rightsMonth":"2月","longTermRequired":false,"price":"1,044","dividendYield":"3.64%","benefitScore":"7","crossScore":"7","benefit":"ギフトカード","generalCredit":"○","institutionalCredit":"○"},{"name":"関門海","code":"3372","rightsMonth":"3月・9月","longTermRequired":false,"price":"254","dividendYield":"0.00%","benefitScore":"4","crossScore":"対象外","benefit":"食事券","generalCredit":"×","institutionalCredit":"×"},{"name":"ジェリービーンズG","code":"3070","rightsMonth":"1月・7月","longTermRequired":false,"price":"128","dividendYield":"0.00%","benefitScore":"3","crossScore":"対象外","benefit":"自社サイトクーポン","generalCredit":"×","institutionalCredit":"×"},{"name":"JIA","code":"7172","rightsMonth":"12月","longTermRequired":true,"price":"2,010","dividendYield":"4.32%","benefitScore":"6","crossScore":"9","benefit":"クオカード、株式新聞","generalCredit":"○","institutionalCredit":"○"},{"name":"トーホー","code":"8142","rightsMonth":"1月","longTermRequired":true,"price":"3,450","dividendYield":"4.42%","benefitScore":"7","crossScore":"8","benefit":"食品、買物券","generalCredit":"○","institutionalCredit":"○"},{"name":"アドバンスクリエイト","code":"8798","rightsMonth":"休止中","longTermRequired":false,"price":"329","dividendYield":"0.00%","benefitScore":"休止中","crossScore":"休止中","benefit":"株主優待は一時休止中","generalCredit":"○","institutionalCredit":"○"},{"name":"吉野家HD","code":"9861","rightsMonth":"2月・8月","longTermRequired":false,"price":"3,080","dividendYield":"0.65%","benefitScore":"8","crossScore":"9","benefit":"吉野家、はなまるうどん食事券","generalCredit":"○","institutionalCredit":"○"}];
+</script>
+<script>
+function crossTradeApp() {
+  return {
+    activeTab: 'dashboard',
+    tabs: [
+      { id: 'dashboard', label: 'ダッシュボード' },
+      { id: 'stocks',    label: '銘柄管理' },
+      { id: 'db',        label: '優待DB' },
+      { id: 'calc',      label: '計算ツール' },
+      { id: 'trades',    label: '取引記録' },
+    ],
+    stocks: [],
+    trades: [],
+    showStockForm: false,
+    editingStock: null,
+    stockForm: {
+      code: '', name: '', rightsDate: '', benefit: '', benefitValue: '',
+      continuousRequired: false, broker: 'SBI', creditType: 'general',
+      gyakuhibuRisk: 'low', status: 'pending', memo: ''
+    },
+    showTradeForm: false,
+    tradeForm: {
+      stockId: '', actualPrice: '', actualShares: '', actualDays: '',
+      actualLendFee: '', benefitReceived: '', benefitValue: '', notes: ''
+    },
+    schedCalcDate: '',
+    schedResult: null,
+    lendCalc: { price: '', shares: '', broker: 'SBI', days: 15 },
+    lendResult: null,
+    dbStocks: [],
+    dbLoading: false,
+    dbError: '',
+    dbSearch: '',
+    dbFilter: { month: 'all', crossableOnly: true, noLongTermOnly: true },
+    showAddFromDB: false,
+    addFromDBStock: null,
+    addFromDBForm: { rightsDate: '', broker: 'SBI', creditType: 'general', memo: '' },
+
+    get today() {
+      return new Date().toLocaleDateString('ja-JP', {
+        year: 'numeric', month: 'long', day: 'numeric', weekday: 'short'
+      });
+    },
+
+    init() {
+      try {
+        const raw = localStorage.getItem('crossTradeApp');
+        if (raw) {
+          const d = JSON.parse(raw);
+          this.stocks = d.stocks || [];
+          this.trades = d.trades || [];
+        }
+      } catch (e) {}
+    },
+
+    async loadDB() {
+      if (this.dbStocks.length > 0) return;
+      this.dbLoading = true;
+      this.dbError = '';
+      try {
+        this.dbStocks = STOCKS_DATA;
+      } catch (e) {
+        this.dbError = 'データ読込失敗。';
+      } finally {
+        this.dbLoading = false;
+      }
+    },
+
+    get filteredDbStocks() {
+      return this.dbStocks.filter(s => {
+        if (this.dbFilter.crossableOnly && s.generalCredit !== '○') return false;
+        if (this.dbFilter.noLongTermOnly && s.longTermRequired) return false;
+        if (this.dbFilter.month !== 'all' && !s.rightsMonth.includes(this.dbFilter.month)) return false;
+        if (this.dbSearch) {
+          const q = this.dbSearch.toLowerCase();
+          return s.name.toLowerCase().includes(q) || s.code.includes(q) || s.benefit.toLowerCase().includes(q);
+        }
+        return true;
+      }).sort((a, b) => {
+        const toNum = v => isNaN(Number(v)) ? 0 : Number(v);
+        return toNum(b.crossScore) - toNum(a.crossScore);
+      });
+    },
+
+    openAddFromDB(stock) {
+      this.addFromDBStock = stock;
+      this.addFromDBForm = { rightsDate: '', broker: 'SBI', creditType: 'general', memo: '' };
+      this.showAddFromDB = true;
+    },
+
+    saveFromDB() {
+      if (!this.addFromDBForm.rightsDate || !this.addFromDBStock) return;
+      const s = this.addFromDBStock;
+      const alreadyExists = this.stocks.some(x => x.code === s.code && x.rightsDate === this.addFromDBForm.rightsDate);
+      if (alreadyExists) { alert('同じ銘柄・権利日がすでに登録されています'); return; }
+      this.stocks.push({
+        id: Date.now().toString(),
+        code: s.code,
+        name: s.name,
+        rightsDate: this.addFromDBForm.rightsDate,
+        benefit: s.benefit,
+        benefitValue: '',
+        continuousRequired: s.longTermRequired,
+        broker: this.addFromDBForm.broker,
+        creditType: this.addFromDBForm.creditType,
+        gyakuhibuRisk: this.addFromDBForm.creditType === 'institutional' ? 'medium' : 'low',
+        status: 'pending',
+        memo: this.addFromDBForm.memo,
+        createdAt: new Date().toISOString().split('T')[0]
+      });
+      this.save();
+      this.showAddFromDB = false;
+      this.addFromDBStock = null;
+    },
+
+    save() {
+      localStorage.setItem('crossTradeApp', JSON.stringify({
+        stocks: this.stocks,
+        trades: this.trades
+      }));
+    },
+
+    addBizDays(dateStr, n) {
+      const d = new Date(dateStr + 'T12:00:00');
+      const dir = n >= 0 ? 1 : -1;
+      let rem = Math.abs(n);
+      while (rem > 0) {
+        d.setDate(d.getDate() + dir);
+        const dow = d.getDay();
+        if (dow !== 0 && dow !== 6) rem--;
+      }
+      return d;
+    },
+
+    formatDate(val) {
+      const d = val instanceof Date ? val : new Date(String(val) + 'T12:00:00');
+      if (isNaN(d.getTime())) return '';
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const dows = ['日', '月', '火', '水', '木', '金', '土'];
+      return `${y}/${m}/${day}（${dows[d.getDay()]}）`;
+    },
+
+    daysDiff(dateStr) {
+      const t = new Date(); t.setHours(0, 0, 0, 0);
+      const d = new Date(String(dateStr) + 'T12:00:00');
+      return Math.ceil((d - t) / 86400000);
+    },
+
+    crossStartDate(r)       { return this.addBizDays(r, -14); },
+    flyingCrossStartDate(r) { return this.addBizDays(r, -15); },
+    exRightsDate(r)         { return this.addBizDays(r, 1);   },
+
+    get dashboardStocks() {
+      const now = new Date(); now.setHours(0, 0, 0, 0);
+      const lim = new Date(now); lim.setDate(lim.getDate() + 60);
+      return this.stocks
+        .filter(s => {
+          const d = new Date(s.rightsDate + 'T12:00:00');
+          return d >= now && d <= lim;
+        })
+        .sort((a, b) => new Date(a.rightsDate) - new Date(b.rightsDate));
+    },
+
+    statusLabel(s) {
+      return { pending: '未着手', ordered: '注文済み', delivered: '現渡し済み', done: '完了' }[s] || s;
+    },
+
+    statusClass(s) {
+      return {
+        pending:   'bg-gray-100 text-gray-700',
+        ordered:   'bg-yellow-100 text-yellow-700',
+        delivered: 'bg-blue-100 text-blue-700',
+        done:      'bg-green-100 text-green-700'
+      }[s] || 'bg-gray-100 text-gray-700';
+    },
+
+    riskLabel(r) {
+      return { low: 'リスク低', medium: 'リスク中', high: 'リスク高' }[r] || r;
+    },
+
+    brokerLabel(b) {
+      return {
+        SBI:   'SBI証券',
+        MUFG:  '三菱UFJ eスマート',
+        SMBC:  'SMBC日興証券',
+        other: 'その他'
+      }[b] || b;
+    },
+
+    updateStatus(stock, status) {
+      stock.status = status;
+      this.save();
+    },
+
+    openAddStock() {
+      this.editingStock = null;
+      this.stockForm = {
+        code: '', name: '', rightsDate: '', benefit: '', benefitValue: '',
+        continuousRequired: false, broker: 'SBI', creditType: 'general',
+        gyakuhibuRisk: 'low', status: 'pending', memo: ''
+      };
+      this.showStockForm = true;
+      this.activeTab = 'stocks';
+    },
+
+    openEditStock(stock) {
+      this.editingStock = stock;
+      this.stockForm = { ...stock };
+      this.showStockForm = true;
+    },
+
+    saveStock() {
+      if (!this.stockForm.code || !this.stockForm.name || !this.stockForm.rightsDate) return;
+      if (this.editingStock) {
+        Object.assign(this.editingStock, this.stockForm);
+      } else {
+        this.stocks.push({
+          ...this.stockForm,
+          id: Date.now().toString(),
+          createdAt: new Date().toISOString().split('T')[0]
+        });
+      }
+      this.showStockForm = false;
+      this.save();
+    },
+
+    deleteStock(id) {
+      if (!confirm('この銘柄を削除しますか？')) return;
+      this.stocks = this.stocks.filter(s => s.id !== id);
+      this.save();
+    },
+
+    calcSchedule() {
+      if (!this.schedCalcDate) return;
+      this.schedResult = {
+        rightsDate:  this.formatDate(new Date(this.schedCalcDate + 'T12:00:00')),
+        crossStart:  this.formatDate(this.addBizDays(this.schedCalcDate, -14)),
+        flyingStart: this.formatDate(this.addBizDays(this.schedCalcDate, -15)),
+        exRights:    this.formatDate(this.addBizDays(this.schedCalcDate, 1)),
+      };
+    },
+
+    brokerRate(b) {
+      return { SBI: 3.9, MUFG: 1.1, SMBC: 1.9 }[b] || 3.9;
+    },
+
+    calcLending() {
+      const { price, shares, broker, days } = this.lendCalc;
+      if (!price || !shares) return;
+      const amt = Number(price) * Number(shares);
+      const rate = this.brokerRate(broker);
+      const daily = amt * (rate / 100) / 365;
+      const d = Number(days) || 15;
+      const fee  = Math.floor(daily * d);
+      const feeF = Math.floor(daily * (d + 1));
+      this.lendResult = {
+        amount:     amt.toLocaleString(),
+        rate:       rate,
+        normalDays: d,
+        normalFee:  fee.toLocaleString(),
+        normalRate: ((fee / amt) * 100).toFixed(4),
+        flyingDays: d + 1,
+        flyingFee:  feeF.toLocaleString(),
+        flyingRate: ((feeF / amt) * 100).toFixed(4),
+      };
+    },
+
+    openAddTrade() {
+      this.tradeForm = {
+        stockId: this.stocks[0]?.id || '',
+        actualPrice: '', actualShares: '', actualDays: '',
+        actualLendFee: '', benefitReceived: '', benefitValue: '', notes: ''
+      };
+      this.showTradeForm = true;
+    },
+
+    saveTrade() {
+      if (!this.tradeForm.stockId) return;
+      const s = this.stocks.find(x => x.id === this.tradeForm.stockId);
+      this.trades.push({
+        ...this.tradeForm,
+        stockName: s?.name || '',
+        stockCode: s?.code || '',
+        id: Date.now().toString(),
+        date: new Date().toISOString().split('T')[0]
+      });
+      this.showTradeForm = false;
+      this.save();
+    },
+
+    deleteTrade(id) {
+      if (!confirm('この取引記録を削除しますか？')) return;
+      this.trades = this.trades.filter(t => t.id !== id);
+      this.save();
+    },
+
+    get totalPnL() {
+      return this.trades.reduce((s, t) => s + (Number(t.benefitValue) || 0) - (Number(t.actualLendFee) || 0), 0);
+    }
+  };
+}
+</script>
+</body>
+</html>
