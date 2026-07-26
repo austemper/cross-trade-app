@@ -102,5 +102,21 @@ def main():
     print(f"保存先: {OUT}")
     print(f"更新日時: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
+    # GitHub Pages へ自動デプロイ
+    import subprocess
+    repo_dir = Path(__file__).parent
+    now_str = datetime.now().strftime('%Y-%m-%d')
+    cmds = [
+        ["git", "-C", str(repo_dir), "add", "index.html", "stocks_all.json"],
+        ["git", "-C", str(repo_dir), "commit", "-m", f"update: 銘柄データ更新 {now_str}"],
+        ["git", "-C", str(repo_dir), "push"],
+    ]
+    for cmd in cmds:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0 and "nothing to commit" not in result.stdout:
+            print(f"git エラー: {result.stderr.strip()}")
+        else:
+            print(result.stdout.strip() or f"{' '.join(cmd[2:])} 完了")
+
 if __name__ == "__main__":
     main()
