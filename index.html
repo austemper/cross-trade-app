@@ -182,7 +182,7 @@
               </div>
               <div class="text-xs text-gray-500 ml-4 mt-0.5"
                 x-text="ev.type==='flying' ? '一般信用(短期15日)売り建て＋現物買いを同日寄成で同時発注（同価格約定で価格差ゼロ）'
-                       : ev.type==='deadline' ? '①信用売(一般/無期限)+現物買 を寄成で発注　②16:00以降に現渡し注文'
+                       : ev.type==='deadline' ? '16:00以降に現渡し注文を発注（フライング済みのため現物は保有中）'
                        : ev.type==='delivery' ? '現渡し約定処理日。SBI証券で約定確認'
                        : '株保有で優待権利確定（操作不要）'"></div>
             </div>
@@ -191,8 +191,8 @@
       </template>
       <!-- 凡例 -->
       <div class="flex gap-3 mt-3 pt-2 border-t border-gray-50 text-xs text-gray-500 flex-wrap">
-        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-orange-400"></span>フライング開始（売り建て）</span>
-        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500"></span>権利付最終日（クロス注文+現渡し注文）</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-orange-400"></span>フライング開始（信用売+現物買 同時寄成）</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500"></span>権利付最終日（16:00以降に現渡し注文）</span>
         <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-500"></span>権利落ち日（現渡し約定）</span>
         <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-purple-500"></span>権利確定日（優待確定）</span>
       </div>
@@ -820,7 +820,7 @@
                   <span class="text-xs font-bold px-1.5 py-0.5 rounded" :class="urgencyClass(s.daysToDeadline)"
                     x-text="s.daysToDeadline === 0 ? '今日！' : s.daysToDeadline < 0 ? '締切超過' : '残り' + s.daysToDeadline + '日'"></span>
                 </div>
-                <div class="text-xs text-gray-400 mt-0.5">①信用売(一般/無期限)+現物買いを寄成で発注　②16:00以降に現渡し注文</div>
+                <div class="text-xs text-gray-400 mt-0.5">16:00以降に現渡し注文を発注（フライング済みのため現物は保有中）</div>
               </div>
               <!-- 権利落ち日 -->
               <div class="border-l-2 border-blue-300 pl-2">
