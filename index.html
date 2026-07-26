@@ -1193,6 +1193,7 @@ function crossTradeApp() {
           this.trades = d.trades || [];
         }
       } catch (e) {}
+      this.loadDB();
     },
 
     async loadDB() {
