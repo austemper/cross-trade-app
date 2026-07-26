@@ -562,6 +562,97 @@
   </div>
 
 
+  <!-- ===== 購入リスト ===== -->
+  <div x-show="activeTab === 'schedule'" class="space-y-3 pb-8">
+
+    <div class="bg-gradient-to-r from-teal-600 to-cyan-600 rounded-xl p-4 text-white">
+      <h2 class="text-base font-bold mb-0.5">クロス取引 購入可能リスト</h2>
+      <p class="text-xs text-teal-100">次回権利付最終日順・一般信用○・継続保有なしのみ表示（祝日未考慮の概算）</p>
+    </div>
+
+    <!-- 件数サマリー -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 px-4 py-3 flex items-center gap-3 text-sm">
+      <span class="text-gray-500">対象:</span>
+      <span class="font-bold text-gray-800" x-text="upcomingCrossable.length + '銘柄'"></span>
+      <span class="text-gray-400 text-xs">｜</span>
+      <span class="text-xs text-orange-600 font-medium" x-text="upcomingCrossable.filter(s=>s.daysToFlying<=0 && s.daysToDeadline>=0).length + '銘柄 フライング開始済み'"></span>
+      <span class="text-xs text-red-600 font-medium" x-text="upcomingCrossable.filter(s=>s.daysToDeadline<=7 && s.daysToDeadline>=0).length + '銘柄 7日以内締切'"></span>
+    </div>
+
+    <!-- 凡例 -->
+    <div class="flex gap-2 flex-wrap text-xs">
+      <span class="bg-red-100 text-red-700 px-2 py-0.5 rounded font-medium">今日が締切/超過</span>
+      <span class="bg-orange-100 text-orange-700 px-2 py-0.5 rounded font-medium">7日以内</span>
+      <span class="bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded font-medium">14日以内</span>
+      <span class="bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">余裕あり</span>
+    </div>
+
+    <!-- 銘柄リスト -->
+    <template x-for="s in upcomingCrossable" :key="s.code + s.rightsMonth">
+      <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex-1 min-w-0">
+            <!-- 銘柄名・コード -->
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-semibold text-gray-900 text-sm" x-text="s.name"></span>
+              <span class="text-xs text-gray-400" x-text="s.code"></span>
+              <span class="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-medium" x-text="s.rightsMonth + '権利'"></span>
+            </div>
+            <!-- 優待内容 -->
+            <div class="text-xs text-gray-500 mt-0.5 truncate" x-text="s.benefit"></div>
+
+            <!-- 日程バッジ群 -->
+            <div class="mt-2 space-y-1">
+              <!-- 通常クロス締切 -->
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-gray-400 w-28 flex-shrink-0">通常クロス締切</span>
+                <span class="text-xs font-medium" x-text="fmtDate(s.kenriTsuki)"></span>
+                <span class="text-xs font-bold px-1.5 py-0.5 rounded" :class="urgencyClass(s.daysToDeadline)"
+                  x-text="s.daysToDeadline === 0 ? '今日！' : s.daysToDeadline < 0 ? '締切超過' : '残り' + s.daysToDeadline + '日'"></span>
+              </div>
+              <!-- フライング開始日 -->
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-gray-400 w-28 flex-shrink-0">フライング開始</span>
+                <span class="text-xs font-medium" x-text="fmtDate(s.flyingStart)"></span>
+                <span class="text-xs px-1.5 py-0.5 rounded"
+                  :class="s.daysToFlying <= 0 ? 'bg-orange-100 text-orange-700 font-bold' : 'bg-gray-100 text-gray-500'"
+                  x-text="s.daysToFlying <= 0 ? '開始可能' : '残り' + s.daysToFlying + '日'"></span>
+              </div>
+            </div>
+
+            <!-- 株価・スコア情報 -->
+            <div class="flex gap-3 mt-2 text-xs text-gray-500">
+              <span x-text="'株価: ¥' + s.price"></span>
+              <span x-text="'配当: ' + s.dividendYield"></span>
+            </div>
+          </div>
+
+          <!-- 右側: スコア + 登録ボタン -->
+          <div class="flex flex-col items-end gap-2 flex-shrink-0">
+            <div class="text-right">
+              <div class="text-xs text-gray-400">クロスお得度</div>
+              <div class="text-lg font-bold"
+                :class="Number(s.crossScore) >= 8 ? 'text-green-600' : Number(s.crossScore) >= 6 ? 'text-blue-600' : 'text-gray-500'"
+                x-text="s.crossScore === '対象外' ? '–' : s.crossScore"></div>
+            </div>
+            <button @click="openAddFromDB(s)"
+              class="bg-blue-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-blue-700 font-medium shadow-sm whitespace-nowrap">
+              + 登録
+            </button>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <div x-show="upcomingCrossable.length === 0" class="text-center py-10 text-gray-400 text-sm">
+      データ読込中...
+    </div>
+
+    <div class="bg-gray-50 rounded-xl p-3 text-xs text-gray-400">
+      ※ 権利付最終日は月末最終営業日の2営業日前を概算。日本の祝日は未考慮のため±1営業日の誤差あり。SBI証券で必ず確認してください。
+    </div>
+  </div>
+
   <!-- ===== 手順ガイド ===== -->
   <div x-show="activeTab === 'guide'" class="space-y-4 pb-8">
 
@@ -1058,6 +1149,7 @@ function crossTradeApp() {
       { id: 'calc',      label: '計算ツール' },
       { id: 'trades',    label: '取引記録' },
       { id: 'guide',     label: '手順ガイド' },
+      { id: 'schedule',  label: '購入リスト' },
     ],
     stocks: [],
     trades: [],
@@ -1115,6 +1207,65 @@ function crossTradeApp() {
         this.dbLoading = false;
       }
     },
+
+    // ===== 購入リスト用メソッド =====
+    _lastBizDay(year, month) {
+      const d = new Date(year, month, 0);
+      while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1);
+      return d;
+    },
+    _kenriTsukiDate(year, month) {
+      const d = this._lastBizDay(year, month);
+      let n = 2;
+      while (n > 0) { d.setDate(d.getDate() - 1); if (d.getDay() !== 0 && d.getDay() !== 6) n--; }
+      return d;
+    },
+    _flyingStartDate(kenriTsuki) {
+      const d = new Date(kenriTsuki);
+      let n = 16;
+      while (n > 0) { d.setDate(d.getDate() - 1); if (d.getDay() !== 0 && d.getDay() !== 6) n--; }
+      return d;
+    },
+    _daysUntil(date) {
+      const t = new Date(); t.setHours(0,0,0,0);
+      return Math.round((date - t) / 86400000);
+    },
+    _nextKenriTsuki(rightsMonthStr) {
+      const months = (rightsMonthStr.match(/\d+/g) || []).map(Number).sort((a,b)=>a-b);
+      const today = new Date(); today.setHours(0,0,0,0);
+      const cy = today.getFullYear();
+      for (const year of [cy, cy+1]) {
+        for (const m of months) {
+          const d = this._kenriTsukiDate(year, m);
+          if (d >= today) return d;
+        }
+      }
+      return null;
+    },
+    get upcomingCrossable() {
+      return this.dbStocks
+        .filter(s => s.generalCredit === '○' && !s.longTermRequired)
+        .map(s => {
+          const kenriTsuki = this._nextKenriTsuki(s.rightsMonth);
+          const flyingStart = kenriTsuki ? this._flyingStartDate(kenriTsuki) : null;
+          const daysToDeadline = kenriTsuki ? this._daysUntil(kenriTsuki) : 9999;
+          const daysToFlying = flyingStart ? this._daysUntil(flyingStart) : 9999;
+          return { ...s, kenriTsuki, flyingStart, daysToDeadline, daysToFlying };
+        })
+        .filter(s => s.kenriTsuki)
+        .sort((a, b) => a.kenriTsuki - b.kenriTsuki);
+    },
+    fmtDate(d) {
+      if (!d) return '';
+      return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+    },
+    urgencyClass(days) {
+      if (days <= 0) return 'bg-red-100 text-red-700';
+      if (days <= 7) return 'bg-orange-100 text-orange-700';
+      if (days <= 14) return 'bg-yellow-100 text-yellow-700';
+      return 'bg-green-100 text-green-700';
+    },
+    // ===== /購入リスト用メソッド =====
 
     get filteredDbStocks() {
       return this.dbStocks.filter(s => {
