@@ -1,0 +1,14 @@
+[
+  {
+    "timestamp": "2026-07-27 00:03",
+    "script": "update_prices",
+    "status": "success",
+    "message": "テスト実行: 315銘柄の株価を更新"
+  },
+  {
+    "timestamp": "2026-07-27 00:03",
+    "script": "update_stocks",
+    "status": "success",
+    "message": "テスト実行: 315銘柄取得 / クロス可能: 182件"
+  }
+]

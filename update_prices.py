@@ -14,6 +14,30 @@ from pathlib import Path
 REPO = Path(__file__).parent
 OUT = REPO / "stocks_all.json"
 HTML = REPO / "index.html"
+LOG = REPO / "execution_log.json"
+MAX_LOG = 50
+
+
+def _append_log(script: str, status: str, message: str):
+    entries = []
+    if LOG.exists():
+        try:
+            entries = json.loads(LOG.read_text())
+        except Exception:
+            pass
+    entries.append({
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "script": script,
+        "status": status,
+        "message": message,
+    })
+    entries = entries[-MAX_LOG:]
+    LOG.write_text(json.dumps(entries, ensure_ascii=False, indent=2))
+    if HTML.exists():
+        html = HTML.read_text()
+        inline = json.dumps(entries, ensure_ascii=False, separators=(',', ':'))
+        html = re.sub(r'const EXECUTION_LOG = \[.*?\];', f'const EXECUTION_LOG = {inline};', html, flags=re.DOTALL)
+        HTML.write_text(html)
 
 
 def fetch_prices(codes: list[str]) -> dict[str, int]:
@@ -85,8 +109,11 @@ def main():
     HTML.write_text(html)
 
     now_str = datetime.now().strftime('%Y-%m-%d')
+    msg = f"{updated}銘柄の株価を更新 (取得成功: {len(prices)}/{len(codes)})"
+    _append_log("update_prices", "success", msg)
+
     for cmd in [
-        ["git", "-C", str(REPO), "add", "index.html", "stocks_all.json"],
+        ["git", "-C", str(REPO), "add", "index.html", "stocks_all.json", "execution_log.json"],
         ["git", "-C", str(REPO), "commit", "-m", f"update: 株価更新 {now_str}"],
         ["git", "-C", str(REPO), "push"],
     ]:
@@ -94,7 +121,7 @@ def main():
         if result.returncode != 0 and "nothing to commit" not in result.stdout + result.stderr:
             print(f"git: {result.stderr.strip()}")
 
-    print(f"完了: {updated}銘柄の株価を更新 / {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print(f"完了: {msg} / {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
 
 if __name__ == "__main__":

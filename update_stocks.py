@@ -11,6 +11,32 @@ from datetime import datetime
 from pathlib import Path
 
 OUT = Path(__file__).parent / "stocks_all.json"
+_LOG = Path(__file__).parent / "execution_log.json"
+_MAX_LOG = 50
+
+
+def _append_log(script: str, status: str, message: str):
+    import re as _re2
+    entries = []
+    if _LOG.exists():
+        try:
+            entries = json.loads(_LOG.read_text())
+        except Exception:
+            pass
+    entries.append({
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "script": script,
+        "status": status,
+        "message": message,
+    })
+    entries = entries[-_MAX_LOG:]
+    _LOG.write_text(json.dumps(entries, ensure_ascii=False, indent=2))
+    html_path = Path(__file__).parent / "index.html"
+    if html_path.exists():
+        html = html_path.read_text()
+        inline = json.dumps(entries, ensure_ascii=False, separators=(',', ':'))
+        html = _re2.sub(r'const EXECUTION_LOG = \[.*?\];', f'const EXECUTION_LOG = {inline};', html, flags=_re2.DOTALL)
+        html_path.write_text(html)
 
 def scrape():
     from playwright.sync_api import sync_playwright
@@ -331,12 +357,16 @@ def main():
     # Google Calendar同期
     sync_google_calendar(fixed)
 
+    # 実行ログ記録
+    _append_log("update_stocks", "success",
+                f"{len(fixed)}銘柄取得 / クロス可能: {crossable}件")
+
     # GitHub Pages へ自動デプロイ
     import subprocess
     repo_dir = Path(__file__).parent
     now_str = datetime.now().strftime('%Y-%m-%d')
     cmds = [
-        ["git", "-C", str(repo_dir), "add", "index.html", "stocks_all.json"],
+        ["git", "-C", str(repo_dir), "add", "index.html", "stocks_all.json", "execution_log.json"],
         ["git", "-C", str(repo_dir), "commit", "-m", f"update: 銘柄データ更新 {now_str}"],
         ["git", "-C", str(repo_dir), "push"],
     ]
