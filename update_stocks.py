@@ -138,41 +138,31 @@ def _next_biz_day(d):
     return d
 
 def sync_google_calendar(stocks):
-    """Google Calendarにクロス取引スケジュールを同期（credentials.json必須）"""
+    """Google Calendarにクロス取引スケジュールを同期（サービスアカウント認証）"""
     try:
-        from google.oauth2.credentials import Credentials
-        from google_auth_oauthlib.flow import InstalledAppFlow
-        from google.auth.transport.requests import Request
+        from google.oauth2 import service_account
         from googleapiclient.discovery import build
     except ImportError:
         print("Google Calendar同期スキップ: ライブラリ未インストール")
-        print("  pip install google-api-python-client google-auth-oauthlib google-auth-httplib2")
+        print("  pip install google-api-python-client google-auth")
         return
 
     repo_dir = Path(__file__).parent
     creds_path = repo_dir / "credentials.json"
-    token_path = repo_dir / "token.json"
 
     if not creds_path.exists():
         print("Google Calendar同期スキップ: credentials.json が見つかりません")
-        print("  → セットアップ手順: https://console.cloud.google.com/")
-        print("    1. プロジェクト作成 → Google Calendar API 有効化")
-        print("    2. OAuthクライアントID(デスクトップ)作成 → credentials.json をこのフォルダに配置")
         return
 
     SCOPES = ["https://www.googleapis.com/auth/calendar"]
-    creds = None
-    if token_path.exists():
-        creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(str(creds_path), SCOPES)
-            creds = flow.run_local_server(port=0)
-        token_path.write_text(creds.to_json())
-
-    service = build("calendar", "v3", credentials=creds)
+    try:
+        creds = service_account.Credentials.from_service_account_file(
+            str(creds_path), scopes=SCOPES
+        )
+        service = build("calendar", "v3", credentials=creds)
+    except Exception as e:
+        print(f"Google Calendar認証失敗: {e}")
+        return
 
     # カレンダー取得または作成
     cal_name = "クロス取引スケジュール"
@@ -187,6 +177,16 @@ def sync_google_calendar(stocks):
             "description": "クロス取引スケジュール管理アプリ自動生成"
         }).execute()["id"]
         print(f"Googleカレンダー作成: {cal_name}")
+        # ユーザーに共有（初回のみ）
+        user_email = "austemper.ci@gmail.com"
+        try:
+            service.acl().insert(calendarId=cal_id, body={
+                "role": "owner",
+                "scope": {"type": "user", "value": user_email}
+            }).execute()
+            print(f"カレンダーを {user_email} に共有しました")
+        except Exception as e:
+            print(f"共有設定失敗（手動で共有してください）: {e}")
 
     # 既存の自動イベント削除（過去30日〜未来180日）
     from datetime import datetime, timedelta, timezone
