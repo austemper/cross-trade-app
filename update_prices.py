@@ -77,51 +77,69 @@ def main():
         print("週末のためスキップ")
         return
 
-    if not OUT.exists():
-        print("ERROR: stocks_all.json が見つかりません。先に update_stocks.py を実行してください。")
+    try:
+        if not OUT.exists():
+            raise FileNotFoundError("stocks_all.json が見つかりません。先に update_stocks.py を実行してください。")
+
+        stocks = json.loads(OUT.read_text())
+        codes = [s["code"] for s in stocks if s.get("code")]
+
+        prices = fetch_prices(codes)
+        print(f"取得成功: {len(prices)}/{len(codes)}件")
+
+        if len(prices) == 0:
+            raise RuntimeError(f"株価取得が0件でした（ネットワーク障害またはAPI制限の可能性）")
+
+        updated = 0
+        for s in stocks:
+            if s["code"] in prices:
+                s["price"] = f"{prices[s['code']]:,}"
+                updated += 1
+
+        OUT.write_text(json.dumps(stocks, ensure_ascii=False, indent=2))
+
+        if not HTML.exists():
+            print(f"完了: {updated}銘柄の株価を更新 (index.html なし)")
+            return
+
+        inline_json = json.dumps(stocks, ensure_ascii=False, separators=(',', ':'))
+        html = HTML.read_text()
+        html = re.sub(
+            r'const STOCKS_DATA = \[.*?\];',
+            f'const STOCKS_DATA = {inline_json};',
+            html, flags=re.DOTALL
+        )
+        HTML.write_text(html)
+
+        now_str = datetime.now().strftime('%Y-%m-%d')
+        msg = f"{updated}銘柄の株価を更新 (取得成功: {len(prices)}/{len(codes)})"
+        _append_log("update_prices", "success", msg)
+
+        for cmd in [
+            ["git", "-C", str(REPO), "add", "index.html", "stocks_all.json", "execution_log.json"],
+            ["git", "-C", str(REPO), "commit", "-m", f"update: 株価更新 {now_str}"],
+            ["git", "-C", str(REPO), "push"],
+        ]:
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0 and "nothing to commit" not in result.stdout + result.stderr:
+                print(f"git: {result.stderr.strip()}")
+
+        print(f"完了: {msg} / {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+
+    except Exception as e:
+        err_msg = str(e)[:120]
+        print(f"ERROR: {err_msg}")
+        try:
+            _append_log("update_prices", "error", err_msg)
+            for cmd in [
+                ["git", "-C", str(REPO), "add", "execution_log.json"],
+                ["git", "-C", str(REPO), "commit", "-m", f"update: 株価更新エラー {datetime.now().strftime('%Y-%m-%d')}"],
+                ["git", "-C", str(REPO), "push"],
+            ]:
+                subprocess.run(cmd, capture_output=True, text=True)
+        except Exception:
+            pass
         sys.exit(1)
-
-    stocks = json.loads(OUT.read_text())
-    codes = [s["code"] for s in stocks if s.get("code")]
-
-    prices = fetch_prices(codes)
-    print(f"取得成功: {len(prices)}/{len(codes)}件")
-
-    updated = 0
-    for s in stocks:
-        if s["code"] in prices:
-            s["price"] = f"{prices[s['code']]:,}"
-            updated += 1
-
-    OUT.write_text(json.dumps(stocks, ensure_ascii=False, indent=2))
-
-    if not HTML.exists():
-        print(f"完了: {updated}銘柄の株価を更新 (index.html なし)")
-        return
-
-    inline_json = json.dumps(stocks, ensure_ascii=False, separators=(',', ':'))
-    html = HTML.read_text()
-    html = re.sub(
-        r'const STOCKS_DATA = \[.*?\];',
-        f'const STOCKS_DATA = {inline_json};',
-        html, flags=re.DOTALL
-    )
-    HTML.write_text(html)
-
-    now_str = datetime.now().strftime('%Y-%m-%d')
-    msg = f"{updated}銘柄の株価を更新 (取得成功: {len(prices)}/{len(codes)})"
-    _append_log("update_prices", "success", msg)
-
-    for cmd in [
-        ["git", "-C", str(REPO), "add", "index.html", "stocks_all.json", "execution_log.json"],
-        ["git", "-C", str(REPO), "commit", "-m", f"update: 株価更新 {now_str}"],
-        ["git", "-C", str(REPO), "push"],
-    ]:
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0 and "nothing to commit" not in result.stdout + result.stderr:
-            print(f"git: {result.stderr.strip()}")
-
-    print(f"完了: {msg} / {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
 
 if __name__ == "__main__":

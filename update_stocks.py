@@ -309,73 +309,87 @@ def sync_google_calendar(stocks):
 
 
 def main():
-    try:
-        stocks = scrape()
-    except ImportError:
-        print("ERROR: playwright未インストール。以下を実行してください:")
-        print("  pip install playwright && python -m playwright install chromium")
-        sys.exit(1)
-
-    if not stocks:
-        print("ERROR: 銘柄データ取得失敗（0件）")
-        sys.exit(1)
-
-    # コードが1列目に入っているケースを修正
-    fixed = []
-    for s in stocks:
-        if s["name"] and s["name"] == s["code"]:
-            continue  # 重複行スキップ
-        import re
-        if re.match(r"^\d{4}$", s["name"]):
-            s["name"], s["code"] = s["code"], s["name"]
-        fixed.append(s)
-
-    OUT.write_text(json.dumps(fixed, ensure_ascii=False, indent=2))
-
-    # index.html の STOCKS_DATA を更新
-    html_path = Path(__file__).parent / "index.html"
-    if html_path.exists():
-        import re as _re
-        inline_json = json.dumps(fixed, ensure_ascii=False, separators=(',', ':'))
-        html = html_path.read_text()
-        html = _re.sub(
-            r'const STOCKS_DATA = \[.*?\];',
-            f'const STOCKS_DATA = {inline_json};',
-            html, flags=_re.DOTALL
-        )
-        html_path.write_text(html)
-        print("index.html の STOCKS_DATA を更新しました")
-
-    crossable = sum(1 for s in fixed if s["generalCredit"] == "○" and not s["longTermRequired"])
-    print(f"完了: {len(fixed)}銘柄 / クロス可能: {crossable}件")
-    print(f"保存先: {OUT}")
-    print(f"更新日時: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-
-    # 手順ガイドの改訂チェック（SBI証券の主要ページを確認）
-    check_guide_updates()
-
-    # Google Calendar同期
-    sync_google_calendar(fixed)
-
-    # 実行ログ記録
-    _append_log("update_stocks", "success",
-                f"{len(fixed)}銘柄取得 / クロス可能: {crossable}件")
-
-    # GitHub Pages へ自動デプロイ
     import subprocess
     repo_dir = Path(__file__).parent
-    now_str = datetime.now().strftime('%Y-%m-%d')
-    cmds = [
-        ["git", "-C", str(repo_dir), "add", "index.html", "stocks_all.json", "execution_log.json"],
-        ["git", "-C", str(repo_dir), "commit", "-m", f"update: 銘柄データ更新 {now_str}"],
-        ["git", "-C", str(repo_dir), "push"],
-    ]
-    for cmd in cmds:
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0 and "nothing to commit" not in result.stdout:
-            print(f"git エラー: {result.stderr.strip()}")
-        else:
-            print(result.stdout.strip() or f"{' '.join(cmd[2:])} 完了")
+
+    try:
+        try:
+            stocks = scrape()
+        except ImportError:
+            raise RuntimeError("playwright未インストール: pip install playwright && python -m playwright install chromium")
+
+        if not stocks:
+            raise RuntimeError("銘柄データ取得失敗（0件）")
+
+        # コードが1列目に入っているケースを修正
+        fixed = []
+        for s in stocks:
+            if s["name"] and s["name"] == s["code"]:
+                continue  # 重複行スキップ
+            import re
+            if re.match(r"^\d{4}$", s["name"]):
+                s["name"], s["code"] = s["code"], s["name"]
+            fixed.append(s)
+
+        OUT.write_text(json.dumps(fixed, ensure_ascii=False, indent=2))
+
+        # index.html の STOCKS_DATA を更新
+        html_path = Path(__file__).parent / "index.html"
+        if html_path.exists():
+            import re as _re
+            inline_json = json.dumps(fixed, ensure_ascii=False, separators=(',', ':'))
+            html = html_path.read_text()
+            html = _re.sub(
+                r'const STOCKS_DATA = \[.*?\];',
+                f'const STOCKS_DATA = {inline_json};',
+                html, flags=_re.DOTALL
+            )
+            html_path.write_text(html)
+            print("index.html の STOCKS_DATA を更新しました")
+
+        crossable = sum(1 for s in fixed if s["generalCredit"] == "○" and not s["longTermRequired"])
+        print(f"完了: {len(fixed)}銘柄 / クロス可能: {crossable}件")
+        print(f"保存先: {OUT}")
+        print(f"更新日時: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+
+        # 手順ガイドの改訂チェック（SBI証券の主要ページを確認）
+        check_guide_updates()
+
+        # Google Calendar同期
+        sync_google_calendar(fixed)
+
+        # 実行ログ記録
+        _append_log("update_stocks", "success",
+                    f"{len(fixed)}銘柄取得 / クロス可能: {crossable}件")
+
+        # GitHub Pages へ自動デプロイ
+        now_str = datetime.now().strftime('%Y-%m-%d')
+        cmds = [
+            ["git", "-C", str(repo_dir), "add", "index.html", "stocks_all.json", "execution_log.json"],
+            ["git", "-C", str(repo_dir), "commit", "-m", f"update: 銘柄データ更新 {now_str}"],
+            ["git", "-C", str(repo_dir), "push"],
+        ]
+        for cmd in cmds:
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0 and "nothing to commit" not in result.stdout:
+                print(f"git エラー: {result.stderr.strip()}")
+            else:
+                print(result.stdout.strip() or f"{' '.join(cmd[2:])} 完了")
+
+    except Exception as e:
+        err_msg = str(e)[:120]
+        print(f"ERROR: {err_msg}")
+        try:
+            _append_log("update_stocks", "error", err_msg)
+            for cmd in [
+                ["git", "-C", str(repo_dir), "add", "execution_log.json"],
+                ["git", "-C", str(repo_dir), "commit", "-m", f"update: 月次DB更新エラー {datetime.now().strftime('%Y-%m-%d')}"],
+                ["git", "-C", str(repo_dir), "push"],
+            ]:
+                subprocess.run(cmd, capture_output=True, text=True)
+        except Exception:
+            pass
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
