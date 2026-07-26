@@ -265,7 +265,7 @@ def sync_google_calendar(stocks):
             # フライング開始日（全日イベント）
             service.events().insert(calendarId=cal_id, body={
                 "summary": f"🚀 [フライング開始] {name}({code})",
-                "description": f"一般信用（短期15日）売り注文を発注可能\n優待: {benefit}\n株価: ¥{price}\nクロスお得度: {score}",
+                "description": f"【同日同時発注】一般信用（短期15日）売り建て＋現物買い\n同じ執行条件（寄成/引成）で同日発注→同価格約定で価格差ゼロ\nコスト=貸株料のみ\n優待: {benefit}\n株価: ¥{price}\nクロスお得度: {score}",
                 "start": {"date": flying.isoformat()},
                 "end": {"date": flying.isoformat()},
                 "colorId": "2",

@@ -181,7 +181,7 @@
                   x-text="ev.type==='flying' ? '🚀 フライング開始' : ev.type==='deadline' ? '⚡ 権利付最終日' : ev.type==='delivery' ? '✅ 権利落ち日' : '🎯 権利確定日'"></span>
               </div>
               <div class="text-xs text-gray-500 ml-4 mt-0.5"
-                x-text="ev.type==='flying' ? '一般信用(短期15日)で売り建て注文を発注'
+                x-text="ev.type==='flying' ? '一般信用(短期15日)売り建て＋現物買いを同日同時発注（同価格約定で価格差ゼロ）'
                        : ev.type==='deadline' ? '①信用売(一般/無期限)+現物買 を寄成/引成で発注　②16:00以降に現渡し注文'
                        : ev.type==='delivery' ? '現渡し約定処理日。SBI証券で約定確認'
                        : '株保有で優待権利確定（操作不要）'"></div>
@@ -810,7 +810,7 @@
                     :class="s.daysToFlying <= 0 ? 'bg-orange-100 text-orange-700 font-bold' : 'bg-gray-100 text-gray-500'"
                     x-text="s.daysToFlying <= 0 ? '開始可能' : '残り' + s.daysToFlying + '日'"></span>
                 </div>
-                <div class="text-xs text-gray-400 mt-0.5">一般信用（短期15日）で売り建て注文を発注</div>
+                <div class="text-xs text-gray-400 mt-0.5">一般信用（短期15日）売り建て＋現物買いを同日同時に発注（価格差ゼロ）</div>
               </div>
               <!-- 権利付最終日 -->
               <div class="border-l-2 border-red-400 pl-2">
@@ -1002,50 +1002,50 @@
       </h3>
       <div class="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4">
         <div class="text-xs font-bold text-orange-800 mb-1">なぜフライングクロスを使うか</div>
-        <div class="text-xs text-gray-600">権利付最終日当日は人気銘柄の売り在庫が枯渇しやすい。早めに確保することで確実に取得できる。貸株料は増えるが在庫枯渇リスクを回避できる。</div>
+        <div class="text-xs text-gray-600 space-y-1">
+          <div>権利付最終日当日は人気銘柄の一般信用売り在庫が枯渇しやすい。早めに確保することで確実に取得できる。</div>
+          <div class="font-semibold text-orange-800">方針: 信用売りと現物買いを<strong>フライング開始日に同時発注</strong>する。売り先行・後買いにすると売り値と買い値に差が生じるため、コストが貸株料のみにならない。同日発注で価格差ゼロを実現する。</div>
+        </div>
       </div>
       <div class="space-y-3">
         <div class="flex gap-3">
           <div class="w-7 h-7 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">1</div>
           <div>
             <div class="font-medium text-sm text-gray-800">16営業日前から売り在庫を監視</div>
-            <div class="text-xs text-gray-500 mt-0.5">人気銘柄は月初から在庫が減少する。週次で確認し、在庫が少なくなってきたら発注タイミング。</div>
+            <div class="text-xs text-gray-500 mt-0.5">人気銘柄は月初から在庫が減少する。週次で確認し、在庫が十分あるうちに発注する。</div>
           </div>
         </div>
         <div class="flex gap-3">
           <div class="w-7 h-7 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">2</div>
           <div>
-            <div class="font-medium text-sm text-gray-800">一般信用（短期15日）で先行発注</div>
-            <div class="text-xs text-gray-500 mt-0.5">SBI証券の「一般信用（短期15日）」を使って売りだけ先に発注。在庫を確保。<strong>現物買いはまだしない。</strong>無期限ではなく<strong>15日</strong>を選ぶのがポイント。</div>
+            <div class="font-medium text-sm text-gray-800">一般信用（短期15日）売り建て＋現物買いを同日同時に発注</div>
+            <div class="text-xs text-gray-500 mt-0.5 space-y-0.5">
+              <div>・<strong>信用売り</strong>: 一般（短期15日）を選択、寄成または引成で発注</div>
+              <div>・<strong>現物買い</strong>: 同じ銘柄・同数を同日同じ執行条件（寄成/引成）で発注</div>
+              <div class="text-orange-700 font-medium">→ 同日同価格で約定するため価格差ゼロ。コスト = 貸株料のみ</div>
+            </div>
           </div>
         </div>
         <div class="flex gap-3">
           <div class="w-7 h-7 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">3</div>
           <div>
-            <div class="font-medium text-sm text-gray-800">権利付最終日の大引け直前に現物買い</div>
-            <div class="text-xs text-gray-500 mt-0.5">売り建ては保有し続けたまま、権利付最終日に現物買いを実施。この時点でクロス完成。</div>
+            <div class="font-medium text-sm text-gray-800">権利付最終日16:00以降に現渡し注文</div>
+            <div class="text-xs text-gray-500 mt-0.5">現物は既に保有済みのため、通常クロスと同様に現渡し注文を発注する。短期15日の強制決済より前に現渡しが完了する。</div>
           </div>
         </div>
         <div class="flex gap-3">
           <div class="w-7 h-7 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">4</div>
           <div>
-            <div class="font-medium text-sm text-gray-800">15日後の強制決済を活用（フライングクロスの本質）</div>
-            <div class="text-xs text-gray-500 mt-0.5">「一般信用（短期15日）」は発注から<strong>15営業日後に自動強制決済</strong>される。16営業日前に売り建てすると、ちょうど権利落ち日以降に強制決済される仕組みを利用する。ただし現渡しを自分で発注した方がコスト確定しやすい。</div>
-          </div>
-        </div>
-        <div class="flex gap-3">
-          <div class="w-7 h-7 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">5</div>
-          <div>
-            <div class="font-medium text-sm text-gray-800">権利落ち日に現渡し</div>
-            <div class="text-xs text-gray-500 mt-0.5">通常クロスと同様に現渡しを実施して決済完了。</div>
+            <div class="font-medium text-sm text-gray-800">権利落ち日に現渡し約定確認</div>
+            <div class="text-xs text-gray-500 mt-0.5">SBI証券で現渡し約定を確認して完了。</div>
           </div>
         </div>
       </div>
       <div class="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-3">
         <div class="text-xs font-bold text-gray-700 mb-1">貸株料の比較</div>
         <div class="text-xs text-gray-600 space-y-1">
-          <div>通常クロス（当日のみ）: 株価 × 株数 × 3.9% ÷ 365 × <strong>約3日分</strong></div>
-          <div>フライング（16日前）: 株価 × 株数 × 3.9% ÷ 365 × <strong>約18日分</strong></div>
+          <div>通常クロス（権利付最終日当日）: 株価 × 株数 × 3.9% ÷ 365 × <strong>約3日分</strong></div>
+          <div>フライング（16営業日前）: 株価 × 株数 × 3.9% ÷ 365 × <strong>約16日分</strong></div>
         </div>
       </div>
     </div>
