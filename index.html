@@ -67,9 +67,128 @@
       </div>
     </div>
 
+    <!-- 年間損益サマリー -->
+    <div x-show="trades.length > 0" class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-3">
+      <div class="text-xs font-bold text-gray-500 mb-2" x-text="new Date().getFullYear() + '年 取引サマリー'"></div>
+      <div class="grid grid-cols-3 gap-2 text-center">
+        <div class="bg-green-50 rounded-lg py-2">
+          <div class="text-xs text-gray-500 mb-0.5">優待価値</div>
+          <div class="font-bold text-green-700 text-sm" x-text="'¥' + yearBenefit.toLocaleString()"></div>
+        </div>
+        <div class="bg-gray-50 rounded-lg py-2">
+          <div class="text-xs text-gray-500 mb-0.5">取引数</div>
+          <div class="font-bold text-gray-700 text-sm" x-text="trades.filter(t=>t.date?.startsWith(String(new Date().getFullYear()))).length + '件'"></div>
+        </div>
+        <div class="rounded-lg py-2" :class="yearPnL >= 0 ? 'bg-blue-50' : 'bg-red-50'">
+          <div class="text-xs text-gray-500 mb-0.5">実質利益</div>
+          <div class="font-bold text-sm" :class="yearPnL >= 0 ? 'text-blue-700' : 'text-red-600'"
+            x-text="(yearPnL >= 0 ? '+' : '') + '¥' + yearPnL.toLocaleString()"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- アラートセクション -->
+    <template x-if="urgentUnregistered.length > 0">
+      <div class="bg-red-50 border border-red-200 rounded-xl p-3 mb-3">
+        <div class="text-xs font-bold text-red-700 mb-2">⚠️ 締切7日以内・未登録のクロスチャンス</div>
+        <div class="space-y-1">
+          <template x-for="s in urgentUnregistered" :key="s.code">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-gray-800 font-medium" x-text="s.name + '(' + s.code + ')'"></span>
+              <span class="font-bold" :class="s.daysToDeadline <= 3 ? 'text-red-600' : 'text-orange-600'"
+                x-text="s.daysToDeadline === 0 ? '今日締切！' : '残り' + s.daysToDeadline + '日'"></span>
+              <button @click="openAddFromDB(s)" class="bg-red-600 text-white px-2 py-0.5 rounded text-xs font-medium hover:bg-red-700">登録</button>
+            </div>
+          </template>
+        </div>
+      </div>
+    </template>
+
+    <template x-if="deliveryDueSoon.length > 0">
+      <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-3">
+        <div class="text-xs font-bold text-blue-700 mb-2">📋 現渡し注文が必要な銘柄（注文済みステータス）</div>
+        <div class="space-y-1">
+          <template x-for="s in deliveryDueSoon" :key="s.id">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-gray-800 font-medium" x-text="s.name + '(' + s.code + ')'"></span>
+              <span class="text-blue-700 font-medium" x-text="'権利付最終日: ' + formatDate(s.rightsDate)"></span>
+              <button @click="updateStatus(s, 'delivered')" class="bg-blue-600 text-white px-2 py-0.5 rounded text-xs font-medium hover:bg-blue-700">現渡し済に</button>
+            </div>
+          </template>
+        </div>
+        <div class="mt-2 text-xs text-blue-600 font-medium">権利付最終日の16:00以降に現渡し注文を発注してください</div>
+      </div>
+    </template>
+
+    <!-- ミニカレンダー -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-4">
+      <!-- ヘッダー -->
+      <div class="flex items-center justify-between mb-3">
+        <button @click="calendarPrev()" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 font-bold">‹</button>
+        <div class="font-bold text-gray-800 text-sm" x-text="calendarYear + '年' + calendarMonth + '月'"></div>
+        <button @click="calendarNext()" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 font-bold">›</button>
+      </div>
+      <!-- 曜日 -->
+      <div class="grid grid-cols-7 text-center text-xs text-gray-400 mb-1">
+        <span class="text-red-400">日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span class="text-blue-400">土</span>
+      </div>
+      <!-- 日付グリッド -->
+      <div class="grid grid-cols-7 gap-0.5">
+        <template x-for="(day, idx) in calendarDays(calendarYear, calendarMonth)" :key="idx">
+          <div class="flex flex-col items-center py-1 rounded-lg cursor-pointer hover:bg-gray-50 min-h-[2.8rem]"
+            :class="[
+              day && calendarDateKey(day) === calendarDateKey(new Date()) ? 'bg-blue-100 hover:bg-blue-100' : '',
+              day && calendarShowDetail === calendarDateKey(day) ? 'ring-2 ring-blue-400' : ''
+            ]"
+            @click="day && calendarEvents[calendarDateKey(day)] ? (calendarShowDetail = calendarShowDetail === calendarDateKey(day) ? null : calendarDateKey(day)) : null">
+            <span class="text-xs leading-tight"
+              :class="[
+                !day ? '' : day.getDay()===0 ? 'text-red-500' : day.getDay()===6 ? 'text-blue-500' : 'text-gray-700',
+                day && calendarDateKey(day) === calendarDateKey(new Date()) ? 'font-bold' : ''
+              ]"
+              x-text="day ? day.getDate() : ''"></span>
+            <template x-if="day && calendarEvents[calendarDateKey(day)]">
+              <div class="flex gap-0.5 flex-wrap justify-center mt-0.5">
+                <template x-if="(calendarEvents[calendarDateKey(day)]||[]).some(e=>e.type==='deadline')">
+                  <span class="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0"></span>
+                </template>
+                <template x-if="(calendarEvents[calendarDateKey(day)]||[]).some(e=>e.type==='flying')">
+                  <span class="w-1.5 h-1.5 rounded-full bg-orange-400 flex-shrink-0"></span>
+                </template>
+                <template x-if="(calendarEvents[calendarDateKey(day)]||[]).some(e=>e.type==='delivery')">
+                  <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0"></span>
+                </template>
+              </div>
+            </template>
+          </div>
+        </template>
+      </div>
+      <!-- 日付クリック時の詳細 -->
+      <template x-if="calendarShowDetail && calendarEvents[calendarShowDetail]">
+        <div class="mt-3 border-t border-gray-100 pt-3 space-y-1 max-h-48 overflow-y-auto">
+          <div class="text-xs font-bold text-gray-600 mb-2" x-text="calendarShowDetail + ' の予定'"></div>
+          <template x-for="ev in calendarEvents[calendarShowDetail]" :key="ev.type+ev.code">
+            <div class="flex items-center gap-2 text-xs py-1">
+              <span class="w-2 h-2 rounded-full flex-shrink-0"
+                :class="ev.type==='deadline' ? 'bg-red-500' : ev.type==='flying' ? 'bg-orange-400' : 'bg-blue-500'"></span>
+              <span class="font-medium text-gray-800" x-text="ev.name + '(' + ev.code + ')'"></span>
+              <span class="text-gray-500"
+                x-text="ev.type==='deadline' ? '⚡クロス締切・現渡し注文(16時以降)' : ev.type==='flying' ? '🚀フライング開始' : '✅現渡し約定確認'"></span>
+            </div>
+          </template>
+        </div>
+      </template>
+      <!-- 凡例 -->
+      <div class="flex gap-3 mt-3 pt-2 border-t border-gray-50 text-xs text-gray-500 flex-wrap">
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500"></span>クロス締切</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-orange-400"></span>フライング開始</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-500"></span>現渡し確認</span>
+      </div>
+    </div>
+
     <!-- 重要注意バナー -->
     <div class="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 mb-4 text-xs text-amber-800">
-      <span class="font-semibold">現渡し注意：</span>権利付最終日の<span class="font-semibold">18:00〜19:00以降</span>に現渡し予約注文を行うこと。15:30以降の取引時間延長中は危険。翌営業日（権利落ち日）に決済されます。
+      <span class="font-semibold">現渡し注意：</span>権利付最終日の<span class="font-semibold">16:00以降（最安全は18:00以降）</span>に現渡し注文を発注すること。16:00前は当日約定扱いで優待取得不可。翌営業日（権利落ち日）朝に決済されます。
     </div>
 
     <!-- 銘柄カード一覧 -->
@@ -1177,6 +1296,9 @@ function crossTradeApp() {
     lendCalc: { price: '', shares: '', broker: 'SBI', days: 15 },
     lendResult: null,
     dbStocks: [],
+    calendarYear: new Date().getFullYear(),
+    calendarMonth: new Date().getMonth() + 1,
+    calendarShowDetail: null,
     dbLoading: false,
     dbError: '',
     dbSearch: '',
@@ -1507,7 +1629,68 @@ function crossTradeApp() {
 
     get totalPnL() {
       return this.trades.reduce((s, t) => s + (Number(t.benefitValue) || 0) - (Number(t.actualLendFee) || 0), 0);
-    }
+    },
+
+    // ===== ダッシュボード追加 =====
+    get yearPnL() {
+      const y = new Date().getFullYear();
+      return this.trades.filter(t => t.date?.startsWith(String(y)))
+        .reduce((s, t) => s + (Number(t.benefitValue)||0) - (Number(t.actualLendFee)||0), 0);
+    },
+    get yearBenefit() {
+      const y = new Date().getFullYear();
+      return this.trades.filter(t => t.date?.startsWith(String(y)))
+        .reduce((s, t) => s + (Number(t.benefitValue)||0), 0);
+    },
+    get urgentUnregistered() {
+      return this.upcomingCrossable.filter(s => s.daysToDeadline >= 0 && s.daysToDeadline <= 7);
+    },
+    get deliveryDueSoon() {
+      return this.stocks.filter(s => s.status === 'ordered');
+    },
+
+    // ===== カレンダー =====
+    calendarDays(year, month) {
+      const first = new Date(year, month - 1, 1);
+      const last  = new Date(year, month, 0);
+      const days  = [];
+      for (let i = 0; i < first.getDay(); i++) days.push(null);
+      for (let d = 1; d <= last.getDate(); d++) days.push(new Date(year, month - 1, d));
+      return days;
+    },
+    calendarDateKey(d) {
+      if (!d) return '';
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    },
+    calendarPrev() {
+      if (this.calendarMonth === 1) { this.calendarMonth = 12; this.calendarYear--; }
+      else this.calendarMonth--;
+      this.calendarShowDetail = null;
+    },
+    calendarNext() {
+      if (this.calendarMonth === 12) { this.calendarMonth = 1; this.calendarYear++; }
+      else this.calendarMonth++;
+      this.calendarShowDetail = null;
+    },
+    get calendarEvents() {
+      const events = {};
+      const add = (date, type, name, code) => {
+        if (!date) return;
+        const k = this.calendarDateKey(date);
+        if (!events[k]) events[k] = [];
+        events[k].push({ type, name, code });
+      };
+      this.upcomingCrossable.forEach(s => {
+        if (s.flyingStart) add(s.flyingStart, 'flying', s.name, s.code);
+        if (s.kenriTsuki) {
+          add(s.kenriTsuki, 'deadline', s.name, s.code);
+          const d = new Date(s.kenriTsuki);
+          do { d.setDate(d.getDate()+1); } while (d.getDay()===0||d.getDay()===6);
+          add(d, 'delivery', s.name, s.code);
+        }
+      });
+      return events;
+    },
   };
 }
 </script>
