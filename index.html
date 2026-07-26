@@ -618,7 +618,7 @@
       </div>
       <div class="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
         <div class="text-xs font-bold text-blue-800 mb-1">2024年11月〜 東証大引け延長に注意</div>
-        <div class="text-xs text-gray-600">東証の大引けが15:00→<strong>15:30</strong>に延長。現渡しはSBI証券で翌営業日の<strong>18:00〜19:30</strong>に実施（証券会社により異なる）。</div>
+        <div class="text-xs text-gray-600">東証の大引けが15:00→<strong>15:30</strong>に延長。現渡し注文はSBI証券で権利付最終日の<strong>16:00以降</strong>に発注（16:00前は当日約定扱いで優待取得不可）。最も安全なのは<strong>18:00以降</strong>。翌営業日朝に約定処理される。</div>
       </div>
     </div>
 
@@ -640,14 +640,14 @@
           <div class="w-7 h-7 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">2</div>
           <div>
             <div class="font-medium text-sm text-gray-800">一般信用売り注文を発注</div>
-            <div class="text-xs text-gray-500 mt-0.5">「信用新規売り」→「一般（無期限）」→成行または指値。大引け直前（15:25頃）に成行で発注するのが確実。</div>
+            <div class="text-xs text-gray-500 mt-0.5">「信用新規売り」→「一般（無期限）」→価格は<strong>「引成」（大引け成行）</strong>を選択。<br>⚠️ 2021年7月以降、信用・現物の<strong>両方を成行にすると注文不成立</strong>。片方を引成、もう片方を成行とする必要あり。前日夜〜朝8:59に「寄成」で両方発注するのが最もシンプル。</div>
           </div>
         </div>
         <div class="flex gap-3">
           <div class="w-7 h-7 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">3</div>
           <div>
             <div class="font-medium text-sm text-gray-800">現物買い注文を発注</div>
-            <div class="text-xs text-gray-500 mt-0.5">売り注文と<strong>同数量・同価格</strong>（成行）で現物買いを発注。ほぼ同時に出すことで価格差リスクを最小化。</div>
+            <div class="text-xs text-gray-500 mt-0.5">売り注文と<strong>同数量</strong>、同じ執行条件（信用を引成にしたなら現物は成行、信用を寄成にしたなら現物も寄成）で発注。寄成なら前日夜〜朝8:59に両方まとめて発注できる。</div>
           </div>
         </div>
         <div class="flex gap-3">
@@ -660,8 +660,8 @@
         <div class="flex gap-3">
           <div class="w-7 h-7 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">5</div>
           <div>
-            <div class="font-medium text-sm text-gray-800">権利落ち日に現渡し</div>
-            <div class="text-xs text-gray-500 mt-0.5">翌営業日（権利落ち日）の夕方〜夜に「現渡し」を実施。SBIは<strong>18:00〜翌8:30頃</strong>に受付。「信用返済」→「現渡」を選択。</div>
+            <div class="font-medium text-sm text-gray-800">現渡し注文を発注</div>
+            <div class="text-xs text-gray-500 mt-0.5">権利付最終日の<strong>16:00以降</strong>に現渡し注文を発注（最安全は18:00以降）。翌営業日（権利落ち日）朝に約定処理される。「信用返済」→「現引現渡」→「現渡」を選択。<br>⚠️ 16:00前に発注すると当日分として処理され、優待の権利が取れなくなるので厳守。</div>
           </div>
         </div>
       </div>
@@ -688,8 +688,8 @@
         <div class="flex gap-3">
           <div class="w-7 h-7 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">2</div>
           <div>
-            <div class="font-medium text-sm text-gray-800">一般信用売りのみ先行発注</div>
-            <div class="text-xs text-gray-500 mt-0.5">権利付最終日より前に一般信用売りだけ先に発注して在庫を確保。<strong>現物買いはまだしない。</strong></div>
+            <div class="font-medium text-sm text-gray-800">一般信用（短期15日）で先行発注</div>
+            <div class="text-xs text-gray-500 mt-0.5">SBI証券の「一般信用（短期15日）」を使って売りだけ先に発注。在庫を確保。<strong>現物買いはまだしない。</strong>無期限ではなく<strong>15日</strong>を選ぶのがポイント。</div>
           </div>
         </div>
         <div class="flex gap-3">
@@ -702,8 +702,8 @@
         <div class="flex gap-3">
           <div class="w-7 h-7 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">4</div>
           <div>
-            <div class="font-medium text-sm text-gray-800">SBI証券の強制決済ルールに注意</div>
-            <div class="text-xs text-gray-500 mt-0.5">一般信用（無期限）は<strong>権利付最終日の15営業日後</strong>に自動決済される場合あり。権利落ち日の現渡しを忘れずに。</div>
+            <div class="font-medium text-sm text-gray-800">15日後の強制決済を活用（フライングクロスの本質）</div>
+            <div class="text-xs text-gray-500 mt-0.5">「一般信用（短期15日）」は発注から<strong>15営業日後に自動強制決済</strong>される。16営業日前に売り建てすると、ちょうど権利落ち日以降に強制決済される仕組みを利用する。ただし現渡しを自分で発注した方がコスト確定しやすい。</div>
           </div>
         </div>
         <div class="flex gap-3">
@@ -736,20 +736,23 @@
             <li>SBI証券アプリ →「取引」→「国内株式」</li>
             <li>銘柄検索 → 銘柄選択</li>
             <li>「信用売り」→「新規売り」</li>
-            <li>信用区分：<strong>一般（無期限）</strong>を選択</li>
-            <li>数量・価格（成行推奨）を入力</li>
+            <li>信用区分：通常クロスは<strong>一般（無期限）</strong>、フライングクロスは<strong>一般（短期15日）</strong>を選択</li>
+            <li>価格：<strong>引成</strong>（大引け成行）または<strong>寄成</strong>（前日夜〜朝8:59に発注）を選択。成行+成行は不可</li>
             <li>確認 → 発注</li>
           </ol>
         </div>
         <div>
-          <div class="text-sm font-bold text-gray-700 mb-2">■ 現渡し（権利落ち日の夕方）</div>
+          <div class="text-sm font-bold text-gray-700 mb-2">■ 現渡し（権利付最終日の16:00以降）</div>
           <ol class="text-xs text-gray-600 space-y-1 list-decimal list-inside">
             <li>「取引」→「信用取引」→「返済・現引・現渡」</li>
             <li>対象の信用売り建て玉を選択</li>
             <li>「現渡」を選択</li>
             <li>現物株数を確認して発注</li>
-            <li>受付時間：<strong>18:00〜翌8:30頃</strong>（翌営業日朝に決済）</li>
+            <li>発注可能時間：権利付最終日の<strong>16:00以降</strong>（最安全は<strong>18:00以降</strong>）〜翌朝。翌営業日朝に約定処理。</li>
           </ol>
+          <div class="mt-2 bg-red-50 border border-red-200 rounded p-2 text-xs text-red-700">
+            ⚠️ 16:00前に発注すると当日約定扱いとなり優待権利が取れない。15:30大引け後でも16:00までは危険。
+          </div>
         </div>
       </div>
     </div>

@@ -59,6 +59,56 @@ def scrape():
         browser.close()
         return stocks
 
+def check_guide_updates():
+    """SBI証券の信用取引ルールページを取得してハッシュを比較、変化があれば警告を出す"""
+    import urllib.request
+    import hashlib
+
+    repo_dir = Path(__file__).parent
+    hash_file = repo_dir / ".guide_check_hashes.json"
+
+    # 監視対象URL（SBI証券の信用取引ルール・現渡し関連ページ）
+    targets = {
+        "sbi_shinyo_rule": "https://search.sbisec.co.jp/v2/popwin/attention/trading/stock_06.html",
+        "sbi_trade_hours": "https://search.sbisec.co.jp/v2/popwin/help/trade_stock_08_01.html",
+    }
+
+    prev_hashes = {}
+    if hash_file.exists():
+        try:
+            prev_hashes = json.loads(hash_file.read_text())
+        except Exception:
+            pass
+
+    new_hashes = {}
+    changed = []
+    for key, url in targets.items():
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                content = resp.read()
+            h = hashlib.sha256(content).hexdigest()
+            new_hashes[key] = h
+            if key in prev_hashes and prev_hashes[key] != h:
+                changed.append(url)
+        except Exception as e:
+            print(f"  チェック失敗 ({key}): {e}")
+            if key in prev_hashes:
+                new_hashes[key] = prev_hashes[key]
+
+    hash_file.write_text(json.dumps(new_hashes, ensure_ascii=False, indent=2))
+
+    if changed:
+        print("\n" + "="*60)
+        print("⚠️  手順ガイド改訂チェック: 以下のページに変化を検出")
+        for url in changed:
+            print(f"   {url}")
+        print("→ 手順ガイドの内容を確認・更新してください")
+        print("="*60 + "\n")
+    else:
+        print("手順ガイドチェック: 変化なし")
+
+
 def main():
     try:
         stocks = scrape()
@@ -101,6 +151,9 @@ def main():
     print(f"完了: {len(fixed)}銘柄 / クロス可能: {crossable}件")
     print(f"保存先: {OUT}")
     print(f"更新日時: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+
+    # 手順ガイドの改訂チェック（SBI証券の主要ページを確認）
+    check_guide_updates()
 
     # GitHub Pages へ自動デプロイ
     import subprocess
