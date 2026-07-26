@@ -181,8 +181,8 @@
                   x-text="ev.type==='flying' ? '🚀 フライング開始' : ev.type==='deadline' ? '⚡ 権利付最終日' : ev.type==='delivery' ? '✅ 権利落ち日' : '🎯 権利確定日'"></span>
               </div>
               <div class="text-xs text-gray-500 ml-4 mt-0.5"
-                x-text="ev.type==='flying' ? '一般信用(短期15日)売り建て＋現物買いを同日同時発注（同価格約定で価格差ゼロ）'
-                       : ev.type==='deadline' ? '①信用売(一般/無期限)+現物買 を寄成/引成で発注　②16:00以降に現渡し注文'
+                x-text="ev.type==='flying' ? '一般信用(短期15日)売り建て＋現物買いを同日寄成で同時発注（同価格約定で価格差ゼロ）'
+                       : ev.type==='deadline' ? '①信用売(一般/無期限)+現物買 を寄成で発注　②16:00以降に現渡し注文'
                        : ev.type==='delivery' ? '現渡し約定処理日。SBI証券で約定確認'
                        : '株保有で優待権利確定（操作不要）'"></div>
             </div>
@@ -820,7 +820,7 @@
                   <span class="text-xs font-bold px-1.5 py-0.5 rounded" :class="urgencyClass(s.daysToDeadline)"
                     x-text="s.daysToDeadline === 0 ? '今日！' : s.daysToDeadline < 0 ? '締切超過' : '残り' + s.daysToDeadline + '日'"></span>
                 </div>
-                <div class="text-xs text-gray-400 mt-0.5">①信用売(一般/無期限)+現物買 を寄成/引成で発注　②16:00以降に現渡し注文</div>
+                <div class="text-xs text-gray-400 mt-0.5">①信用売(一般/無期限)+現物買いを寄成で発注　②16:00以降に現渡し注文</div>
               </div>
               <!-- 権利落ち日 -->
               <div class="border-l-2 border-blue-300 pl-2">
@@ -967,14 +967,14 @@
           <div class="w-7 h-7 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">2</div>
           <div>
             <div class="font-medium text-sm text-gray-800">一般信用売り注文を発注</div>
-            <div class="text-xs text-gray-500 mt-0.5">「信用新規売り」→「一般（無期限）」→価格は<strong>「引成」（大引け成行）</strong>を選択。<br>⚠️ 2021年7月以降、信用・現物の<strong>両方を成行にすると注文不成立</strong>。片方を引成、もう片方を成行とする必要あり。前日夜〜朝8:59に「寄成」で両方発注するのが最もシンプル。</div>
+            <div class="text-xs text-gray-500 mt-0.5">「信用新規売り」→「一般（無期限）」→価格は<strong>「寄成」</strong>を選択（前日夜〜朝8:59に発注）。<br>⚠️ 2021年7月以降、信用・現物の<strong>両方を成行にすると注文不成立</strong>のため必ず寄成を使う。</div>
           </div>
         </div>
         <div class="flex gap-3">
           <div class="w-7 h-7 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">3</div>
           <div>
             <div class="font-medium text-sm text-gray-800">現物買い注文を発注</div>
-            <div class="text-xs text-gray-500 mt-0.5">売り注文と<strong>同数量</strong>、同じ執行条件（信用を引成にしたなら現物は成行、信用を寄成にしたなら現物も寄成）で発注。寄成なら前日夜〜朝8:59に両方まとめて発注できる。</div>
+            <div class="text-xs text-gray-500 mt-0.5">売り注文と<strong>同数量・寄成</strong>で発注。前日夜〜朝8:59に信用売りと現物買いをまとめて発注できる。</div>
           </div>
         </div>
         <div class="flex gap-3">
@@ -1020,8 +1020,8 @@
           <div>
             <div class="font-medium text-sm text-gray-800">一般信用（短期15日）売り建て＋現物買いを同日同時に発注</div>
             <div class="text-xs text-gray-500 mt-0.5 space-y-0.5">
-              <div>・<strong>信用売り</strong>: 一般（短期15日）を選択、寄成または引成で発注</div>
-              <div>・<strong>現物買い</strong>: 同じ銘柄・同数を同日同じ執行条件（寄成/引成）で発注</div>
+              <div>・<strong>信用売り</strong>: 一般（短期15日）を選択、<strong>寄成</strong>で発注（前日夜〜朝8:59）</div>
+              <div>・<strong>現物買い</strong>: 同じ銘柄・同数を同日<strong>寄成</strong>で発注</div>
               <div class="text-orange-700 font-medium">→ 同日同価格で約定するため価格差ゼロ。コスト = 貸株料のみ</div>
             </div>
           </div>
@@ -1064,7 +1064,7 @@
             <li>銘柄検索 → 銘柄選択</li>
             <li>「信用売り」→「新規売り」</li>
             <li>信用区分：通常クロスは<strong>一般（無期限）</strong>、フライングクロスは<strong>一般（短期15日）</strong>を選択</li>
-            <li>価格：<strong>引成</strong>（大引け成行）または<strong>寄成</strong>（前日夜〜朝8:59に発注）を選択。成行+成行は不可</li>
+            <li>価格：<strong>寄成</strong>（前日夜〜朝8:59に発注）を選択。成行+成行は不可のため寄成を使う</li>
             <li>確認 → 発注</li>
           </ol>
         </div>

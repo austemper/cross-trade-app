@@ -265,7 +265,7 @@ def sync_google_calendar(stocks):
             # フライング開始日（全日イベント）
             service.events().insert(calendarId=cal_id, body={
                 "summary": f"🚀 [フライング開始] {name}({code})",
-                "description": f"【同日同時発注】一般信用（短期15日）売り建て＋現物買い\n同じ執行条件（寄成/引成）で同日発注→同価格約定で価格差ゼロ\nコスト=貸株料のみ\n優待: {benefit}\n株価: ¥{price}\nクロスお得度: {score}",
+                "description": f"【同日同時発注】一般信用（短期15日）売り建て＋現物買い\n両方を寄成で同日発注→同価格約定で価格差ゼロ\nコスト=貸株料のみ\n優待: {benefit}\n株価: ¥{price}\nクロスお得度: {score}",
                 "start": {"date": flying.isoformat()},
                 "end": {"date": flying.isoformat()},
                 "colorId": "2",
@@ -277,7 +277,6 @@ def sync_google_calendar(stocks):
                 "summary": f"⚡ [クロス締切・現渡し注文] {name}({code})",
                 "description": (
                     f"【朝 〜8:59】信用売り(一般/無期限)+現物買い を寄成で発注\n"
-                    f"  または 引成(信用)+成行(現物) で15:25頃に発注\n"
                     f"  ※両方成行は不可（2021年7月以降）\n\n"
                     f"【16:00以降】現渡し注文を発注\n"
                     f"  SBI: 取引→信用取引→返済・現引現渡→現渡\n"
