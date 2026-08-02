@@ -10,5 +10,23 @@
     "script": "update_stocks",
     "status": "success",
     "message": "テスト実行: 315銘柄取得 / クロス可能: 182件"
+  },
+  {
+    "timestamp": "2026-07-28 18:01",
+    "script": "update_prices",
+    "status": "success",
+    "message": "104銘柄の株価を更新 (取得成功: 104/315)"
+  },
+  {
+    "timestamp": "2026-07-28 18:01",
+    "script": "update_prices",
+    "status": "error",
+    "message": "[Errno 24] Too many open files"
+  },
+  {
+    "timestamp": "2026-08-02 10:41",
+    "script": "update_stocks",
+    "status": "success",
+    "message": "315銘柄取得 / クロス可能: 123件"
   }
 ]
