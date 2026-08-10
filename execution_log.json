@@ -28,5 +28,59 @@
     "script": "update_stocks",
     "status": "success",
     "message": "315銘柄取得 / クロス可能: 123件"
+  },
+  {
+    "timestamp": "2026-08-03 18:45",
+    "script": "update_prices",
+    "status": "success",
+    "message": "165銘柄の株価を更新 (取得成功: 165/315)"
+  },
+  {
+    "timestamp": "2026-08-03 18:45",
+    "script": "update_prices",
+    "status": "error",
+    "message": "[Errno 24] Too many open files"
+  },
+  {
+    "timestamp": "2026-08-04 18:01",
+    "script": "update_prices",
+    "status": "success",
+    "message": "183銘柄の株価を更新 (取得成功: 183/315)"
+  },
+  {
+    "timestamp": "2026-08-04 18:01",
+    "script": "update_prices",
+    "status": "error",
+    "message": "[Errno 24] Too many open files"
+  },
+  {
+    "timestamp": "2026-08-06 18:00",
+    "script": "update_prices",
+    "status": "success",
+    "message": "255銘柄の株価を更新 (取得成功: 255/315)"
+  },
+  {
+    "timestamp": "2026-08-06 18:00",
+    "script": "update_prices",
+    "status": "error",
+    "message": "[Errno 24] Too many open files"
+  },
+  {
+    "timestamp": "2026-08-07 18:00",
+    "script": "update_prices",
+    "status": "success",
+    "message": "284銘柄の株価を更新 (取得成功: 284/315)"
+  },
+  {
+    "timestamp": "2026-08-07 18:00",
+    "script": "update_prices",
+    "status": "error",
+    "message": "[Errno 24] Too many open files"
+  },
+  {
+    "timestamp": "2026-08-10 18:00",
+    "script": "update_prices",
+    "status": "success",
+    "message": "304銘柄の株価を更新 (取得成功: 304/315)"
   }
 ]
