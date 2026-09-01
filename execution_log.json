@@ -112,5 +112,11 @@
     "script": "update_prices",
     "status": "success",
     "message": "302銘柄の株価を更新 (取得成功: 302/315)"
+  },
+  {
+    "timestamp": "2026-09-01 10:08",
+    "script": "update_stocks",
+    "status": "error",
+    "message": "The read operation timed out"
   }
 ]
