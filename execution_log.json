@@ -136,5 +136,11 @@
     "script": "update_prices",
     "status": "success",
     "message": "293銘柄の株価を更新 (取得成功: 293/315)"
+  },
+  {
+    "timestamp": "2026-09-04 19:03",
+    "script": "update_prices",
+    "status": "success",
+    "message": "289銘柄の株価を更新 (取得成功: 289/315)"
   }
 ]
