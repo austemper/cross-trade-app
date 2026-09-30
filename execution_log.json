@@ -238,5 +238,11 @@
     "script": "update_prices",
     "status": "success",
     "message": "288銘柄の株価を更新 (取得成功: 288/315)"
+  },
+  {
+    "timestamp": "2026-10-01 07:08",
+    "script": "update_stocks",
+    "status": "error",
+    "message": "Page.goto: net::ERR_INTERNET_DISCONNECTED at https://kurosan99.tokyo/15851/\nCall log:\n  - navigating to \"https://kurosan"
   }
 ]
