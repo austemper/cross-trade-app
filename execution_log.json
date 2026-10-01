@@ -244,5 +244,11 @@
     "script": "update_stocks",
     "status": "error",
     "message": "Page.goto: net::ERR_INTERNET_DISCONNECTED at https://kurosan99.tokyo/15851/\nCall log:\n  - navigating to \"https://kurosan"
+  },
+  {
+    "timestamp": "2026-10-01 18:02",
+    "script": "update_prices",
+    "status": "error",
+    "message": "株価取得が0件でした（ネットワーク障害またはAPI制限の可能性）"
   }
 ]
