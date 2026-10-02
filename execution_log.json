@@ -250,5 +250,11 @@
     "script": "update_prices",
     "status": "error",
     "message": "株価取得が0件でした（ネットワーク障害またはAPI制限の可能性）"
+  },
+  {
+    "timestamp": "2026-10-02 18:01",
+    "script": "update_prices",
+    "status": "error",
+    "message": "株価取得が0件でした（ネットワーク障害またはAPI制限の可能性）"
   }
 ]
