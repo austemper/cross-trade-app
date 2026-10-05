@@ -256,5 +256,11 @@
     "script": "update_prices",
     "status": "error",
     "message": "株価取得が0件でした（ネットワーク障害またはAPI制限の可能性）"
+  },
+  {
+    "timestamp": "2026-10-05 18:24",
+    "script": "update_prices",
+    "status": "success",
+    "message": "294銘柄の株価を更新 (取得成功: 294/315)"
   }
 ]
