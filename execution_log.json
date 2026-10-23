@@ -1,11 +1,5 @@
 [
   {
-    "timestamp": "2026-08-02 10:41",
-    "script": "update_stocks",
-    "status": "success",
-    "message": "315銘柄取得 / クロス可能: 123件"
-  },
-  {
     "timestamp": "2026-08-03 18:45",
     "script": "update_prices",
     "status": "success",
@@ -298,5 +292,11 @@
     "script": "update_prices",
     "status": "success",
     "message": "294銘柄の株価を更新 (取得成功: 294/315)"
+  },
+  {
+    "timestamp": "2026-10-23 18:12",
+    "script": "update_prices",
+    "status": "success",
+    "message": "304銘柄の株価を更新 (取得成功: 304/315)"
   }
 ]
