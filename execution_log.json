@@ -2,12 +2,6 @@
   {
     "timestamp": "2026-08-04 18:01",
     "script": "update_prices",
-    "status": "success",
-    "message": "183銘柄の株価を更新 (取得成功: 183/315)"
-  },
-  {
-    "timestamp": "2026-08-04 18:01",
-    "script": "update_prices",
     "status": "error",
     "message": "[Errno 24] Too many open files"
   },
@@ -298,5 +292,11 @@
     "script": "update_prices",
     "status": "success",
     "message": "292銘柄の株価を更新 (取得成功: 292/315)"
+  },
+  {
+    "timestamp": "2026-10-28 18:22",
+    "script": "update_prices",
+    "status": "success",
+    "message": "304銘柄の株価を更新 (取得成功: 304/315)"
   }
 ]
